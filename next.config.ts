@@ -35,8 +35,6 @@ const nextConfig: NextConfig = {
   // Static export neumí Image optimization
   images: { unoptimized: true },
 
-  reactCompiler: true,
-
   // Rewrites jen v dev — production WAR poběží same-origin, žádný proxy nepotřebuje
   ...(isDev && {
     async rewrites() {
