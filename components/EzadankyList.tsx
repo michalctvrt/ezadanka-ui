@@ -9,11 +9,12 @@
  *
  * Komponenta si data fetchuje sama přes `searchEzadankyByRid(rid)`.
  * Při kliknutí na řádek otevře `EzadankaDetail` modal s plnými údaji.
+ *
+ * Styl: DC Flipper — teal section header, čistá tabulka.
  */
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, FileText, ChevronRight } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import EzadankaDetail from "./EzadankaDetail";
 import { searchEzadankyByRid } from "@/lib/api";
 import type { FlatZadankaListItem, Modalita } from "@/lib/parser";
@@ -26,7 +27,7 @@ interface Props {
 
 const MODALITA_BARVY: Record<Modalita, string> = {
   RTG: "bg-orange-100 text-orange-800",
-  SONO: "bg-blue-100 text-blue-800",
+  SONO: "bg-sky-100 text-sky-800",
   MR: "bg-purple-100 text-purple-800",
   CT: "bg-red-100 text-red-800",
   OTHER: "bg-gray-200 text-gray-700",
@@ -70,91 +71,92 @@ export default function EzadankyList({ rid, onlyActive = true }: Props) {
   if (!rid) return null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="w-4 h-4" />
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      {/* Section header — DC Flipper teal */}
+      <div className="bg-brand-teal-50 border-b border-brand-teal-100 px-5 py-3 flex items-center gap-2">
+        <FileText className="w-4 h-4 text-brand-teal-600" />
+        <h2 className="font-semibold text-brand-navy">
           {onlyActive ? "Aktivní eŽádanky" : "eŽádanky pacienta"}
-          {!loading && data.length > 0 && (
-            <span className="text-xs font-normal text-gray-500 ml-2">
-              ({data.length})
-            </span>
-          )}
-        </CardTitle>
-      </CardHeader>
-
-      <CardContent className="p-0">
-        {loading && (
-          <p className="p-6 text-sm text-gray-500">Načítám eŽádanky…</p>
+        </h2>
+        {!loading && data.length > 0 && (
+          <span className="text-sm text-gray-500">
+            ({data.length})
+          </span>
         )}
+      </div>
 
-        {error && (
-          <div className="m-4 p-3 rounded-md border border-red-200 bg-red-50 text-sm text-red-700 flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>{error}</span>
-          </div>
-        )}
+      {loading && (
+        <p className="p-6 text-sm text-gray-500">Načítám eŽádanky…</p>
+      )}
 
-        {!loading && !error && data.length === 0 && (
-          <p className="p-6 text-sm text-gray-500">
-            Pacient nemá žádné aktivní eŽádanky.
-          </p>
-        )}
+      {error && (
+        <div className="m-4 p-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
 
-        {!loading && !error && data.length > 0 && (
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 text-left">
-              <tr>
-                <th className="px-4 py-2 font-medium">Modalita</th>
-                <th className="px-4 py-2 font-medium">Vyšetření</th>
-                <th className="px-4 py-2 font-medium">Urgentnost</th>
-                <th className="px-4 py-2 font-medium">Žadatel</th>
-                <th className="px-4 py-2 font-medium">Datum</th>
-                <th className="px-4 py-2 w-8"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((z) => (
-                <tr
-                  key={z.id}
-                  onClick={() => setOpenId(z.id)}
-                  className="border-t border-gray-200 hover:bg-gray-50 cursor-pointer transition"
-                >
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                        MODALITA_BARVY[z.modalita]
-                      }`}
-                    >
-                      {z.modalita}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">{z.vysetreniNazev}</td>
-                  <td
-                    className={`px-4 py-3 ${
-                      URGENTNOST_BARVY[z.urgentnost] ?? URGENTNOST_BARVY.rutinní
+      {!loading && !error && data.length === 0 && (
+        <p className="p-6 text-sm text-gray-500">
+          Pacient nemá žádné aktivní eŽádanky.
+        </p>
+      )}
+
+      {!loading && !error && data.length > 0 && (
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs font-medium text-gray-600 uppercase tracking-wider border-b border-gray-200">
+              <th className="px-5 py-3">Modalita</th>
+              <th className="px-5 py-3">Vyšetření</th>
+              <th className="px-5 py-3">Urgentnost</th>
+              <th className="px-5 py-3">Žadatel</th>
+              <th className="px-5 py-3">Datum</th>
+              <th className="px-5 py-3 w-8"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((z) => (
+              <tr
+                key={z.id}
+                onClick={() => setOpenId(z.id)}
+                className="border-b border-gray-100 last:border-0 hover:bg-brand-teal-50/50 cursor-pointer transition"
+              >
+                <td className="px-5 py-3.5">
+                  <span
+                    className={`inline-block px-2.5 py-0.5 rounded-md text-xs font-medium ${
+                      MODALITA_BARVY[z.modalita]
                     }`}
                   >
-                    {z.urgentnost}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{z.zadatel}</td>
-                  <td className="px-4 py-3 text-gray-600">
-                    {formatDate(z.datumVytvoreni)}
-                  </td>
-                  <td className="px-4 py-3 text-gray-400">
-                    <ChevronRight className="w-4 h-4" />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </CardContent>
+                    {z.modalita}
+                  </span>
+                </td>
+                <td className="px-5 py-3.5 text-gray-900">
+                  {z.vysetreniNazev}
+                </td>
+                <td
+                  className={`px-5 py-3.5 ${
+                    URGENTNOST_BARVY[z.urgentnost] ?? URGENTNOST_BARVY.rutinní
+                  }`}
+                >
+                  {z.urgentnost}
+                </td>
+                <td className="px-5 py-3.5 text-gray-600">{z.zadatel}</td>
+                <td className="px-5 py-3.5 text-gray-600">
+                  {formatDate(z.datumVytvoreni)}
+                </td>
+                <td className="px-5 py-3.5 text-gray-400">
+                  <ChevronRight className="w-4 h-4" />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       {openId && (
         <EzadankaDetail id={openId} onClose={() => setOpenId(null)} />
       )}
-    </Card>
+    </div>
   );
 }
 
