@@ -16,6 +16,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, FileText, ChevronRight } from "lucide-react";
 import EzadankaDetail from "./EzadankaDetail";
+import PacientHlavicka from "./PacientHlavicka";
 import { searchEzadankyByRid } from "@/lib/api";
 import type { FlatZadankaListItem, Modalita } from "@/lib/parser";
 
@@ -70,22 +71,35 @@ export default function EzadankyList({ rid, onlyActive = true }: Props) {
 
   if (!rid) return null;
 
-  return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      {/* Section header — DC Flipper teal */}
-      <div className="bg-brand-teal-50 border-b border-brand-teal-100 px-5 py-3 flex items-center gap-2">
-        <FileText className="w-4 h-4 text-brand-teal-600" />
-        <h2 className="font-semibold text-brand-navy">
-          {onlyActive ? "Aktivní eŽádanky" : "eŽádanky pacienta"}
-        </h2>
-        {!loading && data.length > 0 && (
-          <span className="text-sm text-gray-500">
-            ({data.length})
-          </span>
-        )}
-      </div>
+  // Hlavička pacienta — bereme data z první žádanky (všechny mají stejného pacienta).
+  const pacient = data[0]?.pacient ?? null;
 
-      {loading && (
+  return (
+    <div className="space-y-4">
+      {/* Hlavička pacienta — jen když máme aspoň 1 žádanku */}
+      {pacient && (
+        <PacientHlavicka
+          jmeno={pacient.jmeno}
+          prijmeni={pacient.prijmeni}
+          datumNarozeni={pacient.datumNarozeni}
+          rid={pacient.rid || rid}
+        />
+      )}
+
+      {/* Seznam žádanek */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        {/* Section header — DC Flipper teal */}
+        <div className="bg-brand-teal-50 border-b border-brand-teal-100 px-5 py-3 flex items-center gap-2">
+          <FileText className="w-4 h-4 text-brand-teal-600" />
+          <h2 className="font-semibold text-brand-navy">
+            {onlyActive ? "Aktivní eŽádanky" : "eŽádanky pacienta"}
+          </h2>
+          {!loading && data.length > 0 && (
+            <span className="text-sm text-gray-500">({data.length})</span>
+          )}
+        </div>
+
+        {loading && (
         <p className="p-6 text-sm text-gray-500">Načítám eŽádanky…</p>
       )}
 
@@ -153,9 +167,10 @@ export default function EzadankyList({ rid, onlyActive = true }: Props) {
         </table>
       )}
 
-      {openId && (
-        <EzadankaDetail id={openId} onClose={() => setOpenId(null)} />
-      )}
+        {openId && (
+          <EzadankaDetail id={openId} onClose={() => setOpenId(null)} />
+        )}
+      </div>
     </div>
   );
 }

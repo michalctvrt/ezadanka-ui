@@ -116,9 +116,8 @@ export default function EzadankaDetail({ id, onClose }: Props) {
                   <div>
                     <p className="font-medium">Klinický obsah není dostupný</p>
                     <p className="text-xs mt-0.5">
-                      Detail vyšetření, diagnóza a biometrické údaje nepřišly
-                      ze MZČR API. Pacient by se měl vrátit k žadateli s
-                      papírovou žádankou.
+                      Detail vyšetření, diagnóza a biometrické údaje nejsou v
+                      databázi MZČR.
                     </p>
                   </div>
                 </div>

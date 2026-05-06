@@ -3,8 +3,7 @@
 /**
  * Demo / showcase stránka modulu eŽádanka — pro standalone běh
  * (`npm run dev` na test serveru). V produkci pod `/CardFileWebWS/michalovo/`
- * bude tato stránka entry point modulu, hlavičku DcFlipperHeader případně
- * skryjeme (záleží, jak Václav modul integruje do staré JSF kartoteky).
+ * bude tato stránka entry point modulu.
  */
 
 import { useState } from "react";
@@ -35,7 +34,7 @@ export default function Home() {
       <main className="min-h-screen py-8 px-6">
         <div className="max-w-5xl mx-auto space-y-6">
           <h1 className="text-2xl font-bold text-center text-brand-navy">
-            eŽádanky pacienta
+            Hledat pacienta
           </h1>
 
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
@@ -66,8 +65,7 @@ export default function Home() {
               </button>
             </div>
             <p className="text-xs text-gray-500 mt-3">
-              Zadej rodné číslo bez lomítka (9 nebo 10 cifer). Pacient musí být
-              registrovaný v MZČR systému eŽádanka.
+              Zadej rodné číslo bez lomítka (9 nebo 10 cifer).
             </p>
           </div>
 

@@ -63,6 +63,8 @@ export interface FlatZadankaListItem {
     rid: string;
     jmeno: string;
     prijmeni: string;
+    /** Datum narození ze MZČR API (YYYY-MM-DD) — pro hlavičku pacienta nad seznamem */
+    datumNarozeni: string | null;
   };
   /** Žadatel — kdo žádanku napsal */
   zadatel: string;
@@ -189,6 +191,7 @@ export function flattenListItem(
       rid: raw.zasilka?.pacient ?? "",
       jmeno: raw.zasilka?.pacientData?.jmeno ?? "",
       prijmeni: raw.zasilka?.pacientData?.prijmeni ?? "",
+      datumNarozeni: raw.zasilka?.pacientData?.datumNarozeni ?? null,
     },
     zadatel: composePersonName(raw.zasilka?.autorData) || "—",
   };
