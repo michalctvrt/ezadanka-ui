@@ -1,0 +1,12 @@
+# Auto-detect a normalizuj line endings: v gitu LF, v working tree podle OS.
+* text=auto eol=lf
+
+# Binární soubory bez normalizace
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.war binary
+*.svg text eol=lf

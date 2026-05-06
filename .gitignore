@@ -1,0 +1,39 @@
+# dependencies
+node_modules
+.pnp
+.pnp.*
+
+# next.js build
+.next/
+out/
+
+# WAR build artefakty
+dist-war/
+*.war
+
+# env (NIKDY do gitu)
+.env*
+!.env.local.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode/
+.idea/
+
+# logs
+*.log
+npm-debug.log*
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# případné výpisy / dumps z databáze (NIKDY do gitu)
+/*.sql
+/*.dump
+/*.csv
+/patient-data*
+/backup*
