@@ -35,13 +35,20 @@ const nextConfig: NextConfig = {
   // Static export neumí Image optimization
   images: { unoptimized: true },
 
-  // Rewrites jen v dev — production WAR poběží same-origin, žádný proxy nepotřebuje
+  // Rewrites jen v dev — production WAR poběží same-origin, žádný proxy nepotřebuje.
+  // Forwardujeme:
+  //   /CardFileWebWS/* → REST API (eŽádanky, pacienti, pojišťovny)
+  //   /CFLocalSyncWeb/* → stará JSF kartoteka (link "Založit vyšetření" atd.)
   ...(isDev && {
     async rewrites() {
       return [
         {
           source: "/CardFileWebWS/:path*",
           destination: `${backendForDev}/CardFileWebWS/:path*`,
+        },
+        {
+          source: "/CFLocalSyncWeb/:path*",
+          destination: `${backendForDev}/CFLocalSyncWeb/:path*`,
         },
       ];
     },

@@ -71,11 +71,18 @@ interface Props {
   onSaved?: () => void;
 }
 
+// V dev mode lze přepsat doménu staré JSF (např. http://cftest.dc-flipper.cz).
+// V produkci (modul same-origin v Payaře) zůstane relativní /CFLocalSyncWeb.
+const DEFAULT_LEGACY_BASE =
+  process.env.NEXT_PUBLIC_LEGACY_BASE_URL
+    ? `${process.env.NEXT_PUBLIC_LEGACY_BASE_URL}/CFLocalSyncWeb`
+    : "/CFLocalSyncWeb";
+
 export default function PacientKarta({
   pid,
   initial,
   mode,
-  legacyBase = "/CFLocalSyncWeb",
+  legacyBase = DEFAULT_LEGACY_BASE,
   onSaved,
 }: Props) {
   const [form, setForm] = useState<PacientKartaInitialData>(initial);

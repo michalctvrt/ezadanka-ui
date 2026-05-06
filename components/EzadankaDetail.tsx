@@ -32,10 +32,17 @@ interface Props {
   onClose: () => void;
 }
 
+// V dev mode lze přepsat doménu staré JSF (např. http://cftest.dc-flipper.cz).
+// V produkci (modul same-origin v Payaře) zůstane relativní /CFLocalSyncWeb.
+const DEFAULT_LEGACY_BASE =
+  process.env.NEXT_PUBLIC_LEGACY_BASE_URL
+    ? `${process.env.NEXT_PUBLIC_LEGACY_BASE_URL}/CFLocalSyncWeb`
+    : "/CFLocalSyncWeb";
+
 export default function EzadankaDetail({
   id,
   pid,
-  legacyBase = "/CFLocalSyncWeb",
+  legacyBase = DEFAULT_LEGACY_BASE,
   onClose,
 }: Props) {
   const [data, setData] = useState<FlatZadankaDetail | null>(null);

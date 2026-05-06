@@ -15,7 +15,7 @@
  */
 
 import { useState } from "react";
-import { Search, AlertTriangle } from "lucide-react";
+import { Search, AlertTriangle, CheckCircle2 } from "lucide-react";
 import DcFlipperHeader from "@/components/DcFlipperHeader";
 import EzadankyList from "@/components/EzadankyList";
 import PacientKarta, {
@@ -183,18 +183,17 @@ function Loaded({
     <div className="space-y-6">
       {/* Banner s upozorněním na eŽádanky — jen pokud existují */}
       {maEzadanky && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900 flex items-start gap-2">
-          <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium">
-              Pacient má {ezadanky.length} aktivní{" "}
-              {ezadanky.length === 1 ? "eŽádanku" : "eŽádanky"} v MZČR.
-            </p>
-            <p className="text-xs mt-0.5">
-              Klikem na žádanku otevřeš její detail. V detailu lze založit
-              vyšetření přímo z dat eŽádanky.
-            </p>
-          </div>
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm text-emerald-900 flex items-center gap-2">
+          <CheckCircle2 className="w-5 h-5 shrink-0" />
+          <p className="font-medium">
+            Pacient má {ezadanky.length} aktivní{" "}
+            {ezadanky.length === 1
+              ? "eŽádanku"
+              : ezadanky.length < 5
+              ? "eŽádanky"
+              : "eŽádanek"}{" "}
+            v MZČR.
+          </p>
         </div>
       )}
 
