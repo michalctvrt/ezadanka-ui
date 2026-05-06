@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 import { Save, FileText, Plus, AlertTriangle, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  findPatientByPid,
   listInsuranceCompanies,
   savePatientData,
 } from "@/lib/api-patient";
@@ -122,23 +123,63 @@ export default function PacientKarta({
     setSaving(true);
     setError(null);
 
+    // Pro string pole posíláme prázdný řetězec ("") místo null, když je
+    // pole prázdné. Václavův backend pravděpodobně ignoruje `null` (chápe
+    // ho jako "nepřišlo, neměnit"). Prázdný string = explicit "smaž to".
     const request: PatientDataSaveInfo = {
       pid,
       firstName: form.firstName.trim(),
-      middleName: form.middleName.trim() || null,
+      middleName: form.middleName.trim(),
       lastName: form.lastName.trim(),
-      title: form.title.trim() || null,
+      title: form.title.trim(),
       birthDate: form.birthDate,
       gender: form.gender as Gender,
-      idInsuranceCompany: form.idInsuranceCompany.trim() || null,
-      email: form.email.trim() || null,
-      phone: form.phone.trim() || null,
+      idInsuranceCompany: form.idInsuranceCompany.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
       weight: form.weight ? Number(form.weight) : null,
       height: form.height ? Number(form.height) : null,
     };
 
     try {
       await savePatientData(pid, request);
+
+      // Po uložení znovu načteme pacienta z DB — backend mohl některá pole
+      // zpracovat jinak, než jsme poslali (cleanup, výchozí hodnoty, atd.).
+      // Předejdeme tak situaci, kdy uživatel vidí "uloženo OK", ale po
+      // refreshi se objeví stará data.
+      try {
+        const fresh = await findPatientByPid(pid);
+        if (fresh?.patientDataInfo) {
+          setForm({
+            firstName: fresh.patientDataInfo.firstName ?? "",
+            middleName: fresh.patientDataInfo.middleName ?? "",
+            lastName: fresh.patientDataInfo.lastName ?? "",
+            title: fresh.patientDataInfo.title ?? "",
+            birthDate: fresh.patientDataInfo.birthDate ?? "",
+            gender:
+              fresh.patientDataInfo.gender === "MALE" ||
+              fresh.patientDataInfo.gender === "FEMALE"
+                ? fresh.patientDataInfo.gender
+                : "",
+            idInsuranceCompany:
+              fresh.patientDataInfo.idInsuranceCompany ?? "",
+            email: fresh.patientDataInfo.email ?? "",
+            phone: fresh.patientDataInfo.phone ?? "",
+            weight:
+              fresh.patientDataInfo.weight != null
+                ? String(fresh.patientDataInfo.weight)
+                : "",
+            height:
+              fresh.patientDataInfo.height != null
+                ? String(fresh.patientDataInfo.height)
+                : "",
+          });
+        }
+      } catch {
+        /* refresh selhal — uživatel uvidí svoji uloženou verzi */
+      }
+
       setSavedAt(Date.now());
       onSaved?.();
     } catch (e) {
