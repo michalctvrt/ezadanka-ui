@@ -29,9 +29,21 @@ export function normalizeRc(input: string): string {
   return input.trim().replace(/\s+/g, "").replace("/", "");
 }
 
+/**
+ * Parser RČ — záměrně **velmi tolerantní**.
+ *
+ * MZČR PID nemusí být klasické české RČ — může to být cizinec, novorozenec
+ * s prozatímním ID, nebo jiný nestandardní formát. Neblokujeme — vrátíme
+ * `validFormat: true` pro cokoliv, co má 9–10 cifer, a `birthDate`/`gender`
+ * naplníme jen pokud sedí klasický český formát. Jinak null.
+ *
+ * Workflow v UI tak funguje pro všechny pacienty — předvyplnění z RČ se
+ * prostě nedopočítá pro cizince, ale recepční doplní ručně.
+ */
 export function parseRc(input: string): RcParseResult {
   const rc = normalizeRc(input);
 
+  // Sanity check — alespoň 9-10 cifer
   if (!/^\d{9,10}$/.test(rc)) {
     return {
       normalized: rc,
@@ -43,6 +55,28 @@ export function parseRc(input: string): RcParseResult {
     };
   }
 
+  // Pokus se rozparsovat český RČ formát — ale neblokuj při selhání
+  const parsed = tryParseClassicCzechRc(rc);
+
+  return {
+    normalized: rc,
+    validFormat: true, // formát ok (9-10 cifer)
+    validChecksum: parsed?.validChecksum ?? true,
+    birthDate: parsed?.birthDate ?? null,
+    gender: parsed?.gender ?? null,
+    error: null, // never block — i nestandardní PID jdou dál
+  };
+}
+
+/**
+ * Pokus se rozparsovat RČ jako klasický český formát.
+ * Vrací null, pokud RČ formát neodpovídá (cizinec, novorozenec, atd.).
+ */
+function tryParseClassicCzechRc(rc: string): {
+  birthDate: string;
+  gender: Gender;
+  validChecksum: boolean;
+} | null {
   const yy = parseInt(rc.substring(0, 2), 10);
   let mm = parseInt(rc.substring(2, 4), 10);
   const dd = parseInt(rc.substring(4, 6), 10);
@@ -60,14 +94,7 @@ export function parseRc(input: string): RcParseResult {
   } else if (mm >= 1 && mm <= 12) {
     gender = "MALE";
   } else {
-    return {
-      normalized: rc,
-      validFormat: false,
-      validChecksum: false,
-      birthDate: null,
-      gender: null,
-      error: "Rodné číslo má neplatný měsíc.",
-    };
+    return null; // měsíc mimo platné rozpětí — ne český RČ formát
   }
 
   // 9cif → vždy 1900+yy. 10cif → yy <= 53 → 2000+yy, jinak 1900+yy
@@ -80,16 +107,7 @@ export function parseRc(input: string): RcParseResult {
     date.getUTCMonth() === mm - 1 &&
     date.getUTCDate() === dd;
 
-  if (!isValidDate) {
-    return {
-      normalized: rc,
-      validFormat: false,
-      validChecksum: false,
-      birthDate: null,
-      gender: null,
-      error: "Rodné číslo obsahuje neplatné datum narození.",
-    };
-  }
+  if (!isValidDate) return null; // neplatný den (32.1., 31.2., atd.)
 
   const birthDate = `${fullYear}-${String(mm).padStart(2, "0")}-${String(
     dd
@@ -103,14 +121,7 @@ export function parseRc(input: string): RcParseResult {
     validChecksum = mod === 10 ? checkDigit === 0 : mod === 0;
   }
 
-  return {
-    normalized: rc,
-    validFormat: true,
-    validChecksum,
-    birthDate,
-    gender,
-    error: validChecksum ? null : "Kontrolní cifra rodného čísla nesedí.",
-  };
+  return { birthDate, gender, validChecksum };
 }
 
 /** Formátuje RČ pro zobrazení (s lomítkem za 6 ciframi). */
