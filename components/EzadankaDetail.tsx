@@ -25,10 +25,19 @@ import type { FlatZadankaDetail } from "@/lib/parser";
 interface Props {
   /** UUID žádanky (např. "0d54820f-6dcd-47cc-8c85-36b80bb515cf") */
   id: string;
+  /** RČ pacienta — pro link "Založit vyšetření" do staré JSF kartoteky */
+  pid?: string;
+  /** URL prefix pro starou JSF kartoteku (default: /CFLocalSyncWeb) */
+  legacyBase?: string;
   onClose: () => void;
 }
 
-export default function EzadankaDetail({ id, onClose }: Props) {
+export default function EzadankaDetail({
+  id,
+  pid,
+  legacyBase = "/CFLocalSyncWeb",
+  onClose,
+}: Props) {
   const [data, setData] = useState<FlatZadankaDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -220,10 +229,18 @@ export default function EzadankaDetail({ id, onClose }: Props) {
                 <Row label="ICP" value={data.zadatel.icpZadatele} />
               </Section>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
+              <div className="flex justify-between items-center gap-2 pt-3 border-t border-gray-200">
                 <Button variant="outline" onClick={onClose}>
                   Zavřít
                 </Button>
+                {pid && (
+                  <a
+                    href={buildZalozitVysetreniUrl(legacyBase, pid, data)}
+                    className="inline-flex items-center justify-center gap-2 bg-brand-teal hover:bg-brand-teal-700 text-white text-sm font-medium px-4 py-2 rounded-md transition"
+                  >
+                    Založit vyšetření
+                  </a>
+                )}
               </div>
             </div>
           )}
@@ -359,5 +376,34 @@ function composePojistovna(
 ): string | null {
   if (kod && nazev) return `${kod} — ${nazev}`;
   return nazev ?? kod ?? null;
+}
+
+/**
+ * Sestavení URL na starou JSF stránku "Nové vyšetření" s předvyplněnými
+ * daty z eŽádanky. Konkrétní query parametry je třeba dohodnout s Václavem
+ * — JSF stránka musí umět přijmout: pid, ezadanka_id, modalita, diagnoza,
+ * castTela, lateralita, vyska, vaha, atd.
+ *
+ * Pro teď generujeme aspoň pid a ezadanka_id; zbytek doladíme po domluvě.
+ */
+function buildZalozitVysetreniUrl(
+  legacyBase: string,
+  pid: string,
+  z: import("@/lib/parser").FlatZadankaDetail
+): string {
+  const params = new URLSearchParams({
+    pid,
+    ezadanka_id: z.id,
+    ezadanka_kod: z.kod,
+  });
+  if (z.diagnoza.kod) params.set("diagnoza_kod", z.diagnoza.kod);
+  if (z.diagnoza.klinickaOtazka)
+    params.set("popis_diagnozy", z.diagnoza.klinickaOtazka);
+  if (z.vysetreni.modalitaKod)
+    params.set("modalita", z.vysetreni.modalitaKod);
+  if (z.vysetreni.castTela) params.set("cast_tela", z.vysetreni.castTela);
+  if (z.vysetreni.lateralita)
+    params.set("lateralita", z.vysetreni.lateralita);
+  return `${legacyBase}/secured/study/edit.xhtml?${params.toString()}`;
 }
 
