@@ -27,6 +27,12 @@ interface Props {
   id: string;
   /** RČ pacienta — pro link "Založit vyšetření" do staré JSF kartoteky */
   pid?: string;
+  /**
+   * Existuje pacient v naší DB? Tlačítko "Založit vyšetření" je aktivní
+   * jen v tomto případě — JSF stránka pacienta hledá v DB a pokud nenajde,
+   * vrátí "Chybné rodné číslo!". Default true (zachová staré chování).
+   */
+  patientExists?: boolean;
   /** URL prefix pro starou JSF kartoteku (default: /CFLocalSyncWeb) */
   legacyBase?: string;
   onClose: () => void;
@@ -42,6 +48,7 @@ const DEFAULT_LEGACY_BASE =
 export default function EzadankaDetail({
   id,
   pid,
+  patientExists = true,
   legacyBase = DEFAULT_LEGACY_BASE,
   onClose,
 }: Props) {
@@ -240,14 +247,20 @@ export default function EzadankaDetail({
                 <Button variant="outline" onClick={onClose}>
                   Zavřít
                 </Button>
-                {pid && (
-                  <a
-                    href={buildZalozitVysetreniUrl(legacyBase, pid, data)}
-                    className="inline-flex items-center justify-center gap-2 bg-brand-teal hover:bg-brand-teal-700 text-white text-sm font-medium px-4 py-2 rounded-md transition"
-                  >
-                    Založit vyšetření
-                  </a>
-                )}
+                {pid &&
+                  (patientExists ? (
+                    <a
+                      href={buildZalozitVysetreniUrl(legacyBase, pid, data)}
+                      className="inline-flex items-center justify-center gap-2 bg-brand-teal hover:bg-brand-teal-700 text-white text-sm font-medium px-4 py-2 rounded-md transition"
+                    >
+                      Založit vyšetření
+                    </a>
+                  ) : (
+                    <span className="text-xs text-gray-500 italic max-w-md text-right">
+                      Před založením vyšetření nejprve založ pacienta v
+                      kartě níže.
+                    </span>
+                  ))}
               </div>
             </div>
           )}

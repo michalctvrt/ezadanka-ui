@@ -198,7 +198,13 @@ function Loaded({
       )}
 
       {/* eŽádanky tabulka — jen když nějaké jsou */}
-      {maEzadanky && <EzadankyList rid={rid} data={ezadanky} />}
+      {maEzadanky && (
+        <EzadankyList
+          rid={rid}
+          data={ezadanky}
+          patientExists={existuje}
+        />
+      )}
 
       {/* Karta pacienta — vždy, jen v jiném módu */}
       <PacientKarta

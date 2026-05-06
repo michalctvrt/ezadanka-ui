@@ -22,6 +22,11 @@ interface Props {
   onlyActive?: boolean;
   /** Předem načtená data — pokud máme, fetch přeskočíme */
   data?: FlatZadankaListItem[];
+  /**
+   * Existuje pacient v naší DB? Předáno do EzadankaDetail — ovlivní,
+   * jestli se zobrazí tlačítko "Založit vyšetření" nebo info hláška.
+   */
+  patientExists?: boolean;
 }
 
 const MODALITA_BARVY: Record<Modalita, string> = {
@@ -43,6 +48,7 @@ export default function EzadankyList({
   rid,
   onlyActive = true,
   data: preloadedData,
+  patientExists = true,
 }: Props) {
   const [data, setData] = useState<FlatZadankaListItem[]>(
     preloadedData ?? []
@@ -166,6 +172,7 @@ export default function EzadankyList({
         <EzadankaDetail
           id={openId}
           pid={rid}
+          patientExists={patientExists}
           onClose={() => setOpenId(null)}
         />
       )}
