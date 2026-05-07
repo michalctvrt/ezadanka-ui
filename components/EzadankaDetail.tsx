@@ -15,7 +15,7 @@
  */
 
 import React, { useEffect, useState } from "react";
-import { AlertTriangle, Stethoscope, Pencil, X } from "lucide-react";
+import { AlertTriangle, Stethoscope, Pencil, X, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,21 +24,33 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { getEzadankaById } from "@/lib/api";
+import {
+  buildStudyDraftFromEzadanka,
+  createStudy,
+} from "@/lib/api-study";
 import type { FlatZadankaDetail } from "@/lib/parser";
+import type { Gender, PatientInfo } from "@/lib/patient-types";
 
 interface Props {
   /** UUID žádanky (např. "0d54820f-6dcd-47cc-8c85-36b80bb515cf") */
   id: string;
   /** RČ pacienta — pro link "Založit vyšetření" do staré JSF kartoteky */
   pid?: string;
+  /** Pacient z naší DB — potřebujeme pro POST /study (patientData) */
+  patient?: PatientInfo | null;
   /**
    * Existuje pacient v naší DB? Tlačítko "Založit vyšetření" je aktivní
-   * jen v tomto případě — JSF stránka pacienta hledá v DB a pokud nenajde,
-   * vrátí "Chybné rodné číslo!". Default true (zachová staré chování).
+   * jen v tomto případě — vyšetření se nedá založit pro pacienta,
+   * který v DB ještě není. Default true (zachová staré chování).
    */
   patientExists?: boolean;
   /** URL prefix pro starou JSF kartoteku (default: /CFLocalSyncWeb) */
   legacyBase?: string;
+  /**
+   * ID pracoviště, kde se vyšetření zakládá. Pro test natvrdo "BRLE" (Lesná).
+   * V produkci přijde podle přihlášené ordinace.
+   */
+  idWorkingplace?: string;
   onClose: () => void;
 }
 
@@ -52,14 +64,18 @@ const DEFAULT_LEGACY_BASE =
 export default function EzadankaDetail({
   id,
   pid,
+  patient,
   patientExists = true,
   legacyBase = DEFAULT_LEGACY_BASE,
+  idWorkingplace = "BRLE",
   onClose,
 }: Props) {
   const [data, setData] = useState<FlatZadankaDetail | null>(null);
   const [editedData, setEditedData] = useState<FlatZadankaDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const isEditing = editedData !== null;
   const view = editedData ?? data;
@@ -362,6 +378,19 @@ export default function EzadankaDetail({
                 />
               </Section>
 
+              {/* Chyba při zakládání vyšetření */}
+              {createError && (
+                <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">
+                      Nepodařilo se založit vyšetření
+                    </p>
+                    <p className="text-xs mt-0.5">{createError}</p>
+                  </div>
+                </div>
+              )}
+
               {/* Akční tlačítka */}
               <div className="flex justify-between items-center gap-2 pt-3 border-t border-gray-200">
                 <div className="flex gap-2">
@@ -391,19 +420,26 @@ export default function EzadankaDetail({
 
                 {pid &&
                   (patientExists ? (
-                    <a
-                      href={buildZalozitVysetreniUrl(
-                        legacyBase,
-                        // Použijeme RČ z (případně upravených) dat eŽádanky,
-                        // ne fixní z props — recepční mohla v edit režimu
-                        // RČ změnit (např. test PID → reálné RČ).
-                        view.pacient.rid || pid,
-                        view
-                      )}
-                      className="inline-flex items-center justify-center gap-2 bg-brand-teal hover:bg-brand-teal-700 text-white text-sm font-medium px-4 py-2 rounded-md transition"
+                    <Button
+                      variant="teal"
+                      onClick={() =>
+                        handleZalozitVysetreni(
+                          view,
+                          patient,
+                          idWorkingplace,
+                          legacyBase,
+                          setCreating,
+                          setCreateError
+                        )
+                      }
+                      disabled={creating}
+                      className="gap-2"
                     >
-                      Založit vyšetření
-                    </a>
+                      {creating && (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      )}
+                      {creating ? "Zakládám…" : "Založit vyšetření"}
+                    </Button>
                   ) : (
                     <span className="text-xs text-gray-500 italic max-w-md text-right">
                       Před založením vyšetření nejprve založ pacienta v
@@ -554,32 +590,64 @@ function composePojistovna(
 }
 
 /**
- * Sestavení URL na starou JSF stránku "Nové vyšetření" s předvyplněnými
- * daty (po případných úpravách) z eŽádanky.
+ * Handler pro tlačítko "Založit vyšetření".
+ *
+ * 1) Sestaví draft `StudySaveBasicInfo` z eŽádanky a údajů pacienta.
+ * 2) Pošle `POST /CardFileWebWS/rest/study` → vytvoří záznam vyšetření v DB.
+ * 3) Po úspěchu naviguje na JSF `/study/edit.xhtml?id=<vrácené ID>`,
+ *    kde recepční dovyplní `medicalServices` (kódy úkonů a počty).
  */
-function buildZalozitVysetreniUrl(
+async function handleZalozitVysetreni(
+  z: FlatZadankaDetail,
+  patient: PatientInfo | null | undefined,
+  idWorkingplace: string,
   legacyBase: string,
-  pid: string,
-  z: FlatZadankaDetail
-): string {
-  const params = new URLSearchParams({
-    pid,
-    ezadanka_id: z.id,
-    ezadanka_kod: z.kod,
-  });
-  if (z.diagnoza.kod) params.set("diagnoza_kod", z.diagnoza.kod);
-  if (z.diagnoza.nazev) params.set("diagnoza_nazev", z.diagnoza.nazev);
-  if (z.diagnoza.klinickaOtazka)
-    params.set("popis_diagnozy", z.diagnoza.klinickaOtazka);
-  if (z.vysetreni.modalitaKod)
-    params.set("modalita", z.vysetreni.modalitaKod);
-  if (z.vysetreni.castTela) params.set("cast_tela", z.vysetreni.castTela);
-  if (z.vysetreni.lateralita)
-    params.set("lateralita", z.vysetreni.lateralita);
-  if (z.vysetreni.poznamka) params.set("poznamka", z.vysetreni.poznamka);
-  if (z.vysetreni.informaceProPacienta)
-    params.set("instrukce", z.vysetreni.informaceProPacienta);
-  if (z.pacientStav.vyska) params.set("vyska", z.pacientStav.vyska);
-  if (z.pacientStav.vaha) params.set("vaha", z.pacientStav.vaha);
-  return `${legacyBase}/secured/study/edit.xhtml?${params.toString()}`;
+  setCreating: (b: boolean) => void,
+  setCreateError: (s: string | null) => void
+) {
+  if (!patient || !patient.patientDataInfo) {
+    setCreateError(
+      "Pacient v naší DB nebyl nalezen. Nelze založit vyšetření."
+    );
+    return;
+  }
+
+  setCreating(true);
+  setCreateError(null);
+
+  try {
+    const d = patient.patientDataInfo;
+    const study = await createStudy(
+      buildStudyDraftFromEzadanka(
+        z,
+        {
+          pid: patient.pid,
+          firstName: d.firstName,
+          middleName: d.middleName,
+          lastName: d.lastName,
+          title: d.title,
+          birthDate: d.birthDate,
+          gender:
+            d.gender === "MALE" || d.gender === "FEMALE"
+              ? (d.gender as Gender)
+              : undefined,
+          idInsuranceCompany: d.idInsuranceCompany,
+          email: d.email,
+          phone: d.phone,
+          weight: d.weight,
+          height: d.height,
+        },
+        {
+          idWorkingplace,
+          medicalServices: {}, // recepční doplní v JSF
+        }
+      )
+    );
+
+    // Po úspěchu naviguj na JSF stránku se zobrazením/editací vyšetření.
+    window.location.href = `${legacyBase}/secured/study/edit.xhtml?id=${study.id}`;
+  } catch (e) {
+    setCreateError((e as Error).message);
+    setCreating(false);
+  }
 }

@@ -15,6 +15,7 @@ import { AlertTriangle, FileText, ChevronRight } from "lucide-react";
 import EzadankaDetail from "./EzadankaDetail";
 import { searchEzadankyByRid } from "@/lib/api";
 import type { FlatZadankaListItem, Modalita } from "@/lib/parser";
+import type { PatientInfo } from "@/lib/patient-types";
 
 interface Props {
   rid: string;
@@ -27,6 +28,8 @@ interface Props {
    * jestli se zobrazí tlačítko "Založit vyšetření" nebo info hláška.
    */
   patientExists?: boolean;
+  /** Pacient z naší DB — propaguje se do EzadankaDetail pro POST /study */
+  patient?: PatientInfo | null;
 }
 
 const MODALITA_BARVY: Record<Modalita, string> = {
@@ -49,6 +52,7 @@ export default function EzadankyList({
   onlyActive = true,
   data: preloadedData,
   patientExists = true,
+  patient,
 }: Props) {
   const [data, setData] = useState<FlatZadankaListItem[]>(
     preloadedData ?? []
@@ -172,6 +176,7 @@ export default function EzadankyList({
         <EzadankaDetail
           id={openId}
           pid={rid}
+          patient={patient}
           patientExists={patientExists}
           onClose={() => setOpenId(null)}
         />

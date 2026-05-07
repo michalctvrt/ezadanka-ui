@@ -307,6 +307,7 @@ function Loaded({
           rid={pid}
           data={ezadanky}
           patientExists={existuje}
+          patient={patient}
         />
       )}
 
