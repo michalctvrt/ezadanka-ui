@@ -30,7 +30,12 @@ const nextConfig: NextConfig = {
   // basePath jen v produkci — v dev nás brzdí (Next dev server vždy běží na /)
   basePath: isDev ? "" : basePath,
 
-  trailingSlash: true,
+  // trailingSlash:
+  //   prod (static export):   true  — pretty URLs pro WAR deploy v Apache/Tomcat
+  //   dev (rewrites na API):  false — jinak Next přidává `/` k API URLs
+  //                                   a Payara JAX-RS to vrátí 308 bez slashe,
+  //                                   browser zase přidá slash → ERR_TOO_MANY_REDIRECTS
+  trailingSlash: !isDev,
 
   // Static export neumí Image optimization
   images: { unoptimized: true },
