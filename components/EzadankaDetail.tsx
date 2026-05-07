@@ -32,6 +32,7 @@ import type { FlatZadankaDetail } from "@/lib/parser";
 import type { Gender, PatientInfo } from "@/lib/patient-types";
 import VykonyEditor from "./VykonyEditor";
 import { calculateAge } from "@/lib/age";
+import { findMedicalInstitutionById } from "@/lib/api-medical-institutions";
 
 interface Props {
   /** UUID žádanky (např. "0d54820f-6dcd-47cc-8c85-36b80bb515cf") */
@@ -87,6 +88,16 @@ export default function EzadankaDetail({
   const [vybraneSluzby, setVybraneSluzby] = useState<Record<string, number>>(
     {}
   );
+  /**
+   * Existuje IČP žadatele v naší DB poskytovatelů?
+   *  - "checking" — kontrolujeme
+   *  - "yes" — existuje, vše OK
+   *  - "no"  — neexistuje, ukázat varování (založit v JSF kartoteře)
+   *  - "unknown" — IČP chybí, nebo backend selhal jinak — neblokujeme
+   */
+  const [zadatelExists, setZadatelExists] = useState<
+    "checking" | "yes" | "no" | "unknown"
+  >("checking");
 
   const isEditing = editedData !== null;
   const view = editedData ?? data;
@@ -117,6 +128,34 @@ export default function EzadankaDetail({
       cancelled = true;
     };
   }, [id]);
+
+  // Pre-check: existuje IČP žadatele v naší DB poskytovatelů?
+  // Pokud ne, ukážeme recepční varování — Václavův backend by jinak
+  // vrátil 422 při POST /study.
+  useEffect(() => {
+    const icp = data?.zadatel.icpZadatele;
+    if (!icp) {
+      setZadatelExists("unknown");
+      return;
+    }
+
+    let cancelled = false;
+    setZadatelExists("checking");
+
+    findMedicalInstitutionById(icp)
+      .then((info) => {
+        if (cancelled) return;
+        setZadatelExists(info ? "yes" : "no");
+      })
+      .catch(() => {
+        // Síťová / 5xx chyba — neblokujeme, recepční si poradí.
+        if (!cancelled) setZadatelExists("unknown");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.zadatel.icpZadatele]);
 
   // Klinický obsah dostupný? — když máme aspoň jeden klinický údaj
   const klinickyObsahDostupny = !!(
@@ -216,6 +255,29 @@ export default function EzadankaDetail({
                     <p className="text-xs mt-0.5">
                       Detail vyšetření, diagnóza a biometrické údaje nejsou v
                       databázi MZČR.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Varování: IČP žadatele není v naší DB poskytovatelů.
+                  Backend by při POST /study vrátil 422 ("MedicalInstitution
+                  ID not found"). Recepční musí žadatele nejdřív založit
+                  v JSF kartoteře. */}
+              {zadatelExists === "no" && (
+                <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-800 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">
+                      Žadatel není v naší kartotéce
+                    </p>
+                    <p className="text-xs mt-0.5">
+                      {view.zadatel.jmeno
+                        ? `${view.zadatel.jmeno} `
+                        : "Žadatel "}
+                      (IČP <code className="font-mono">{view.zadatel.icpZadatele}</code>)
+                      není v databázi poskytovatelů. Před založením vyšetření
+                      ho prosím přidej v kartotéce (číselník poskytovatelů).
                     </p>
                   </div>
                 </div>
