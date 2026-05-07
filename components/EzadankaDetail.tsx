@@ -278,8 +278,19 @@ export default function EzadankaDetail({
                 />
                 <Row
                   label="Rodné číslo"
-                  value={formatRc(view.pacient.rid)}
-                  editing={false}
+                  value={
+                    isEditing
+                      ? view.pacient.rid
+                      : formatRc(view.pacient.rid)
+                  }
+                  editing={isEditing}
+                  onChange={(v) =>
+                    updateEdited(
+                      "pacient",
+                      "rid",
+                      v.replace(/\s+/g, "").replace(/\//g, "")
+                    )
+                  }
                 />
                 <Row
                   label="Pojišťovna"
@@ -381,7 +392,14 @@ export default function EzadankaDetail({
                 {pid &&
                   (patientExists ? (
                     <a
-                      href={buildZalozitVysetreniUrl(legacyBase, pid, view)}
+                      href={buildZalozitVysetreniUrl(
+                        legacyBase,
+                        // Použijeme RČ z (případně upravených) dat eŽádanky,
+                        // ne fixní z props — recepční mohla v edit režimu
+                        // RČ změnit (např. test PID → reálné RČ).
+                        view.pacient.rid || pid,
+                        view
+                      )}
                       className="inline-flex items-center justify-center gap-2 bg-brand-teal hover:bg-brand-teal-700 text-white text-sm font-medium px-4 py-2 rounded-md transition"
                     >
                       Založit vyšetření

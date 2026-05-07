@@ -59,10 +59,6 @@ export const EMPTY_PACIENT_KARTA_DATA: PacientKartaInitialData = {
   height: "",
 };
 
-// Normalizace zadaného RČ z UI (s lomítkem nebo bez) na PID pro API.
-function normalizePid(input: string): string {
-  return input.trim().replace(/\s+/g, "").replace(/\//g, "");
-}
 
 interface Props {
   /** Rodné číslo bez lomítka */
@@ -92,9 +88,6 @@ export default function PacientKarta({
   onSaved,
 }: Props) {
   const [form, setForm] = useState<PacientKartaInitialData>(initial);
-  // PID jako samostatný editovatelný state — input zobrazuje s lomítkem,
-  // ale pro API ho normalizujeme. Default = pid z props (z URL/parentu).
-  const [pidInput, setPidInput] = useState<string>(formatRc(pid));
   const [insuranceCompanies, setInsuranceCompanies] = useState<
     InsuranceCompanyInfo[]
   >([]);
@@ -106,11 +99,6 @@ export default function PacientKarta({
   useEffect(() => {
     setForm(initial);
   }, [initial]);
-
-  // Když rodič změní pid (např. nové vyhledávání), reset PID inputu
-  useEffect(() => {
-    setPidInput(formatRc(pid));
-  }, [pid]);
 
   // Nahraj seznam pojišťoven
   useEffect(() => {
@@ -124,13 +112,7 @@ export default function PacientKarta({
   const update = (patch: Partial<PacientKartaInitialData>) =>
     setForm((prev) => ({ ...prev, ...patch }));
 
-  // Aktuální PID z formuláře (po normalizaci) — používá se pro API volání.
-  const effectivePid = normalizePid(pidInput);
-  const pidValid = /^\d{9,10}$/.test(effectivePid);
-  const pidChanged = effectivePid !== pid;
-
   const canSave =
-    pidValid &&
     form.firstName.trim() !== "" &&
     form.lastName.trim() !== "" &&
     form.birthDate !== "" &&
@@ -140,17 +122,6 @@ export default function PacientKarta({
   const handleSave = async () => {
     if (!canSave) return;
 
-    // Pokud se mění PID, varování — vznikne nový pacient v DB,
-    // starý zůstává (backend POST /patient/{pid} je upsert podle pid v URL).
-    if (pidChanged && mode === "existing") {
-      const ok = window.confirm(
-        `Mění se rodné číslo z ${formatRc(pid)} na ${formatRc(effectivePid)}.\n\n` +
-          `V DB vznikne NOVÝ pacient s ${formatRc(effectivePid)}, starý zůstane.\n\n` +
-          `Pokračovat?`
-      );
-      if (!ok) return;
-    }
-
     setSaving(true);
     setError(null);
 
@@ -158,7 +129,7 @@ export default function PacientKarta({
     // pole prázdné. Václavův backend pravděpodobně ignoruje `null` (chápe
     // ho jako "nepřišlo, neměnit"). Prázdný string = explicit "smaž to".
     const request: PatientDataSaveInfo = {
-      pid: effectivePid,
+      pid,
       firstName: form.firstName.trim(),
       middleName: form.middleName.trim(),
       lastName: form.lastName.trim(),
@@ -173,14 +144,14 @@ export default function PacientKarta({
     };
 
     try {
-      await savePatientData(effectivePid, request);
+      await savePatientData(pid, request);
 
       // Po uložení znovu načteme pacienta z DB — backend mohl některá pole
       // zpracovat jinak, než jsme poslali (cleanup, výchozí hodnoty, atd.).
       // Předejdeme tak situaci, kdy uživatel vidí "uloženo OK", ale po
       // refreshi se objeví stará data.
       try {
-        const fresh = await findPatientByPid(effectivePid);
+        const fresh = await findPatientByPid(pid);
         if (fresh?.patientDataInfo) {
           setForm({
             firstName: fresh.patientDataInfo.firstName ?? "",
@@ -276,19 +247,7 @@ export default function PacientKarta({
         {/* Sekce: Identifikace */}
         <Section title="Identifikace">
           <Row>
-            <Field
-              label="Rodné číslo *"
-              value={pidInput}
-              onChange={setPidInput}
-              placeholder="691110/3815"
-              hint={
-                pidChanged
-                  ? "⚠ Po Uložit vznikne nový pacient s tímto RČ."
-                  : !pidValid
-                  ? "Musí mít 9 nebo 10 cifer (s lomítkem nebo bez)"
-                  : undefined
-              }
-            />
+            <Field label="Rodné číslo" value={formatRc(pid)} readOnly />
             <Field
               label="Datum narození *"
               type="date"
