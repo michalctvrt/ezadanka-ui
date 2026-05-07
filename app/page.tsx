@@ -3,15 +3,19 @@
 /**
  * Hlavní stránka modulu — workflow přijetí pacienta.
  *
- * 1) Recepční zadá rodné číslo.
- * 2) Paralelně se zavolá:
- *    - `findPatientByPid(rc)` → existuje pacient v naší DB?
- *    - `searchEzadankyByRid(rc, onlyActive)` → má MZČR aktivní eŽádanky?
- * 3) Render podle 4 stavů:
- *    a) existuje + má eŽádanky → karta s daty z DB + nahoře tabulka eŽádanek
- *    b) existuje + bez eŽádanek → jen karta s daty z DB
- *    c) neexistuje + má eŽádanku → karta předvyplněná z eŽádanky + tabulka
- *    d) neexistuje + bez eŽádanek → karta předvyplněná z RČ (datum nar, pohlaví)
+ * Recepční má v ruce papírovou eŽádanku s **kódem** (8 alfanumerických znaků,
+ * např. "YXQWNAGG"). Kód je primární cesta vyhledání. Sekundárně lze zadat
+ * **rodné číslo** pacienta (9–10 cifer).
+ *
+ * Detekce typu vstupu:
+ *   - 8 znaků [A-Z 0-9]                → kód žádanky
+ *   - 9 nebo 10 cifer                  → rodné číslo
+ *
+ * Workflow:
+ *   1) Vyhledat dle kódu nebo RČ.
+ *   2) Z žádanky (pokud nalezena) získat PID pacienta.
+ *   3) Paralelně ověřit existenci pacienta v naší DB (findPatientByPid).
+ *   4) Render karta + seznam eŽádanek (4 stavy podle existence pacienta a žádanek).
  */
 
 import { useState } from "react";
@@ -23,61 +27,144 @@ import PacientKarta, {
   EMPTY_PACIENT_KARTA_DATA,
 } from "@/components/PacientKarta";
 import { findPatientByPid } from "@/lib/api-patient";
-import { searchEzadankyByRid } from "@/lib/api";
+import {
+  searchEzadankyByCode,
+  searchEzadankyByRid,
+} from "@/lib/api";
 import { normalizeRc, parseRc } from "@/lib/rc";
 import type { PatientInfo } from "@/lib/patient-types";
 import type { FlatZadankaListItem } from "@/lib/parser";
 
 type Phase =
   | { kind: "idle" }
-  | { kind: "loading"; rid: string }
+  | { kind: "loading"; query: string }
   | {
       kind: "loaded";
-      rid: string;
+      /** Vstup, který recepční zadala (kód nebo RČ) */
+      input: string;
+      /** PID pacienta — bud z eŽádanky nebo přímo z inputu (RČ) */
+      pid: string;
       patient: PatientInfo | null;
       ezadanky: FlatZadankaListItem[];
     }
-  | { kind: "error"; rid: string; message: string };
+  | { kind: "error"; query: string; message: string }
+  | { kind: "not-found"; query: string };
+
+const KOD_PATTERN = /^[A-Z0-9]{8}$/;
 
 export default function Home() {
   const [query, setQuery] = useState("");
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
 
   const handleSubmit = async () => {
-    const rc = normalizeRc(query);
-    const rcInfo = parseRc(rc);
-    if (!rcInfo.validFormat) {
-      alert(rcInfo.error ?? "Neplatné rodné číslo.");
+    const raw = query.trim();
+    if (!raw) {
+      alert("Zadej kód eŽádanky nebo rodné číslo pacienta.");
       return;
     }
 
-    setPhase({ kind: "loading", rid: rc });
+    setPhase({ kind: "loading", query: raw });
 
-    // Paralelně — ať to ukáže rychle
+    // Detekce typu vstupu
+    const isCode = KOD_PATTERN.test(raw.toUpperCase());
+
+    if (isCode) {
+      await searchByCode(raw.toUpperCase());
+    } else {
+      await searchByRc(raw);
+    }
+  };
+
+  /**
+   * Vyhledávání podle kódu eŽádanky.
+   *
+   * 1) Najde žádanku v MZČR podle kódu → vytáhne PID pacienta.
+   * 2) Pak udělá **stejný flow jako u RČ**: paralelně načte pacienta
+   *    z naší DB + všechny aktivní žádanky daného pacienta.
+   * Výsledek: úplně stejný stav, jako by recepční rovnou zadala RČ —
+   *    zelený banner, tabulka všech aktivních žádanek, karta pacienta.
+   */
+  const searchByCode = async (code: string) => {
+    // Krok 1: najdi žádanku podle kódu (vrátí 0 nebo 1 položku)
+    let firstHit: FlatZadankaListItem[];
+    try {
+      firstHit = await searchEzadankyByCode(code, { onlyActive: false });
+    } catch (e) {
+      setPhase({
+        kind: "error",
+        query: code,
+        message: (e as Error).message,
+      });
+      return;
+    }
+
+    if (firstHit.length === 0) {
+      setPhase({ kind: "not-found", query: code });
+      return;
+    }
+
+    const pid = firstHit[0].pacient.rid;
+
+    // Krok 2: paralelně — pacient v naší DB + všechny aktivní žádanky
     const [patientResult, ezadankyResult] = await Promise.allSettled([
-      findPatientByPid(rc),
-      searchEzadankyByRid(rc, { onlyActive: true }),
+      findPatientByPid(pid),
+      searchEzadankyByRid(pid, { onlyActive: true }),
     ]);
 
-    // Pokud findPatientByPid vyhodil chybu jinou než 404 (které vrací null),
-    // ukážeme chybový stav.
     if (patientResult.status === "rejected") {
       setPhase({
         kind: "error",
-        rid: rc,
+        query: code,
         message: (patientResult.reason as Error).message,
       });
       return;
     }
 
-    // searchEzadankyByRid může selhat samostatně — to není fatální,
-    // jen nepřesměrujeme. Pokud chyba: prázdné pole.
+    // Když by druhý fetch selhal, máme aspoň tu jednu žádanku z prvního.
+    const ezadanky =
+      ezadankyResult.status === "fulfilled" ? ezadankyResult.value : firstHit;
+
+    setPhase({
+      kind: "loaded",
+      input: code,
+      pid,
+      patient: patientResult.value,
+      ezadanky,
+    });
+  };
+
+  /** Vyhledávání podle rodného čísla pacienta */
+  const searchByRc = async (rc: string) => {
+    const normalized = normalizeRc(rc);
+    const rcInfo = parseRc(normalized);
+    if (!rcInfo.validFormat) {
+      alert(rcInfo.error ?? "Neplatné rodné číslo (musí mít 9 nebo 10 cifer).");
+      setPhase({ kind: "idle" });
+      return;
+    }
+
+    // Paralelně — ať se to ukáže rychle
+    const [patientResult, ezadankyResult] = await Promise.allSettled([
+      findPatientByPid(normalized),
+      searchEzadankyByRid(normalized, { onlyActive: true }),
+    ]);
+
+    if (patientResult.status === "rejected") {
+      setPhase({
+        kind: "error",
+        query: normalized,
+        message: (patientResult.reason as Error).message,
+      });
+      return;
+    }
+
     const ezadanky =
       ezadankyResult.status === "fulfilled" ? ezadankyResult.value : [];
 
     setPhase({
       kind: "loaded",
-      rid: rc,
+      input: normalized,
+      pid: normalized,
       patient: patientResult.value,
       ezadanky,
     });
@@ -101,7 +188,7 @@ export default function Home() {
                   htmlFor="rc-input"
                   className="block text-sm font-medium text-gray-700 mb-2"
                 >
-                  Rodné číslo pacienta
+                  Kód eŽádanky nebo rodné číslo pacienta
                 </label>
                 <input
                   id="rc-input"
@@ -109,7 +196,7 @@ export default function Home() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-                  placeholder="např. 9882826031"
+                  placeholder="např. YXQWNAGG nebo 9412034082"
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal focus:border-transparent"
                 />
               </div>
@@ -122,14 +209,31 @@ export default function Home() {
               </button>
             </div>
             <p className="text-xs text-gray-500 mt-3">
-              Zadej rodné číslo bez lomítka (9 nebo 10 cifer).
+              Kód žádanky má 8 alfanumerických znaků (z papírové eŽádanky).
+              Rodné číslo zadej bez lomítka (9 nebo 10 cifer).
             </p>
           </div>
 
           {/* Loading */}
           {phase.kind === "loading" && (
             <div className="text-center py-6 text-sm text-gray-500">
-              Hledám pacienta a eŽádanky…
+              Hledám…
+            </div>
+          )}
+
+          {/* Žádanka nenalezena */}
+          {phase.kind === "not-found" && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800 flex items-start gap-2">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">
+                  eŽádanka s kódem &quot;{phase.query}&quot; nebyla nalezena
+                </p>
+                <p className="text-xs mt-0.5">
+                  Zkontroluj kód na papírové žádance, nebo zadej rodné číslo
+                  pacienta.
+                </p>
+              </div>
             </div>
           )}
 
@@ -144,10 +248,10 @@ export default function Home() {
             </div>
           )}
 
-          {/* Načteno → render podle 4 stavů */}
+          {/* Načteno → render */}
           {phase.kind === "loaded" && (
             <Loaded
-              rid={phase.rid}
+              pid={phase.pid}
               patient={phase.patient}
               ezadanky={phase.ezadanky}
             />
@@ -161,11 +265,11 @@ export default function Home() {
 // ─── Loaded view ──────────────────────────────────────────────────────────
 
 function Loaded({
-  rid,
+  pid,
   patient,
   ezadanky,
 }: {
-  rid: string;
+  pid: string;
   patient: PatientInfo | null;
   ezadanky: FlatZadankaListItem[];
 }) {
@@ -176,8 +280,8 @@ function Loaded({
   const initial: PacientKartaInitialData = existuje
     ? mapFromPatient(patient)
     : maEzadanky
-    ? mapFromEzadanka(ezadanky[0], rid)
-    : mapFromRc(rid);
+    ? mapFromEzadanka(ezadanky[0], pid)
+    : mapFromRc(pid);
 
   return (
     <div className="space-y-6">
@@ -186,7 +290,7 @@ function Loaded({
         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm text-emerald-900 flex items-center gap-2">
           <CheckCircle2 className="w-5 h-5 shrink-0" />
           <p className="font-medium">
-            Pacient má {ezadanky.length} aktivní{" "}
+            Pacient má {ezadanky.length}{" "}
             {ezadanky.length === 1
               ? "eŽádanku"
               : ezadanky.length < 5
@@ -200,7 +304,7 @@ function Loaded({
       {/* eŽádanky tabulka — jen když nějaké jsou */}
       {maEzadanky && (
         <EzadankyList
-          rid={rid}
+          rid={pid}
           data={ezadanky}
           patientExists={existuje}
         />
@@ -208,7 +312,7 @@ function Loaded({
 
       {/* Karta pacienta — vždy, jen v jiném módu */}
       <PacientKarta
-        pid={rid}
+        pid={pid}
         initial={initial}
         mode={existuje ? "existing" : "new"}
       />
@@ -227,9 +331,7 @@ function mapFromPatient(p: PatientInfo): PacientKartaInitialData {
     title: d?.title ?? "",
     birthDate: d?.birthDate ?? "",
     gender:
-      d?.gender === "MALE" || d?.gender === "FEMALE"
-        ? d.gender
-        : "",
+      d?.gender === "MALE" || d?.gender === "FEMALE" ? d.gender : "",
     idInsuranceCompany: d?.idInsuranceCompany ?? "",
     email: d?.email ?? "",
     phone: d?.phone ?? "",
@@ -240,11 +342,9 @@ function mapFromPatient(p: PatientInfo): PacientKartaInitialData {
 
 function mapFromEzadanka(
   e: FlatZadankaListItem,
-  rid: string
+  pid: string
 ): PacientKartaInitialData {
-  // FlatZadankaListItem má jen základní info (jméno, příjmení, datum nar.).
-  // Zbytek (pohlaví, pojišťovna) doplníme z RČ.
-  const rcInfo = parseRc(rid);
+  const rcInfo = parseRc(pid);
   return {
     ...EMPTY_PACIENT_KARTA_DATA,
     firstName: capitalize(e.pacient.jmeno),
@@ -254,8 +354,8 @@ function mapFromEzadanka(
   };
 }
 
-function mapFromRc(rid: string): PacientKartaInitialData {
-  const rcInfo = parseRc(rid);
+function mapFromRc(pid: string): PacientKartaInitialData {
+  const rcInfo = parseRc(pid);
   return {
     ...EMPTY_PACIENT_KARTA_DATA,
     birthDate: rcInfo.birthDate ?? "",
@@ -265,7 +365,6 @@ function mapFromRc(rid: string): PacientKartaInitialData {
 
 function capitalize(s: string): string {
   if (!s) return "";
-  // ROMAN ČTVRTNÍČEK → Roman Čtvrtníček
   return s
     .toLowerCase()
     .split(" ")

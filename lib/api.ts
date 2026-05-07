@@ -49,6 +49,31 @@ export async function searchEzadankyByRid(
 }
 
 /**
+ * Vyhledá eŽádanku podle alfanumerického kódu (např. "YXQWNAGG").
+ * Recepční dostává kód z papírové žádanky pacienta.
+ * Vrací pole — typicky 0 nebo 1 položku.
+ * Volá `GET /ezadanka?code={code}&onlyActive={onlyActive}`.
+ */
+export async function searchEzadankyByCode(
+  code: string,
+  options: { onlyActive?: boolean } = {}
+): Promise<FlatZadankaListItem[]> {
+  const params = new URLSearchParams({ code });
+  if (options.onlyActive !== undefined) {
+    params.set("onlyActive", String(options.onlyActive));
+  }
+
+  const res = await fetch(`${API_BASE}/ezadanka?${params.toString()}`, {
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(await formatBackendError(res));
+
+  const body = (await res.json()) as VyhledejZadankuResponse;
+  return flattenList(body);
+}
+
+/**
  * Načte detail eŽádanky podle UUID.
  * Volá `GET /ezadanka/{id}`.
  */
