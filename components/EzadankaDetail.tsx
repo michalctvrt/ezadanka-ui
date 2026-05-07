@@ -727,14 +727,22 @@ async function handleZalozitVysetreni(
 
   try {
     const d = patient.patientDataInfo;
+    // Fallback z eŽádanky (data z MZČR), pokud má pacient v naší DB
+    // prázdné jméno / příjmení. Známý bug Václavova backendu —
+    // POST /patient/{pid} ignoruje pole firstName/middleName/lastName,
+    // takže ho recepční přes Kartu pacienta neopraví; bez fallbacku
+    // by POST /study spadl na 422 ("patientDatafirstName is EMPTY").
+    const firstName = d.firstName || z.pacient.jmeno || "";
+    const lastName = d.lastName || z.pacient.prijmeni || "";
+
     const study = await createStudy(
       buildStudyDraftFromEzadanka(
         z,
         {
           pid: patient.pid,
-          firstName: d.firstName,
+          firstName,
           middleName: d.middleName,
-          lastName: d.lastName,
+          lastName,
           title: d.title,
           birthDate: d.birthDate,
           gender:
@@ -755,7 +763,10 @@ async function handleZalozitVysetreni(
     );
 
     // Po úspěchu naviguj na JSF stránku se zobrazením/editací vyšetření.
-    window.location.href = `${legacyBase}/secured/study/edit.xhtml?id=${study.id}`;
+    // POZN.: query param je `sid`, NE `id` — Václavova JSF má `id` ignoruje
+    // a stránka zůstane prázdná. Param `prev` je pro tlačítko "Zpět" v JSF.
+    const prev = `${legacyBase}/secured/study/list.xhtml`;
+    window.location.href = `${legacyBase}/secured/study/edit.xhtml?sid=${study.id}&prev=${encodeURIComponent(prev)}`;
   } catch (e) {
     setCreateError((e as Error).message);
     setCreating(false);
