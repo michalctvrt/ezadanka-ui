@@ -31,6 +31,7 @@ import {
 import type { FlatZadankaDetail } from "@/lib/parser";
 import type { Gender, PatientInfo } from "@/lib/patient-types";
 import VykonyEditor from "./VykonyEditor";
+import LekarFormModal from "./LekarFormModal";
 import { calculateAge } from "@/lib/age";
 import { findMedicalInstitutionById } from "@/lib/api-medical-institutions";
 
@@ -92,12 +93,14 @@ export default function EzadankaDetail({
    * Existuje IČP žadatele v naší DB poskytovatelů?
    *  - "checking" — kontrolujeme
    *  - "yes" — existuje, vše OK
-   *  - "no"  — neexistuje, ukázat varování (založit v JSF kartoteře)
+   *  - "no"  — neexistuje, ukázat varování + tlačítko "Založit lékaře"
    *  - "unknown" — IČP chybí, nebo backend selhal jinak — neblokujeme
    */
   const [zadatelExists, setZadatelExists] = useState<
     "checking" | "yes" | "no" | "unknown"
   >("checking");
+  /** Otevřít modal pro založení nového lékaře */
+  const [showLekarForm, setShowLekarForm] = useState(false);
 
   const isEditing = editedData !== null;
   const view = editedData ?? data;
@@ -200,6 +203,7 @@ export default function EzadankaDetail({
   };
 
   return (
+    <>
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0">
         {/* Hlavička modalu — DC Flipper teal */}
@@ -262,12 +266,12 @@ export default function EzadankaDetail({
 
               {/* Varování: IČP žadatele není v naší DB poskytovatelů.
                   Backend by při POST /study vrátil 422 ("MedicalInstitution
-                  ID not found"). Recepční musí žadatele nejdřív založit
-                  v JSF kartoteře. */}
+                  ID not found"). Recepční má v banneru tlačítko, které
+                  otevře LekarFormModal s předvyplněnými daty z eŽádanky. */}
               {zadatelExists === "no" && (
-                <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-800 flex items-start gap-2">
+                <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-800 flex items-start gap-3">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <div>
+                  <div className="flex-1">
                     <p className="font-medium">
                       Žadatel není v naší kartotéce
                     </p>
@@ -276,10 +280,17 @@ export default function EzadankaDetail({
                         ? `${view.zadatel.jmeno} `
                         : "Žadatel "}
                       (IČP <code className="font-mono">{view.zadatel.icpZadatele}</code>)
-                      není v databázi poskytovatelů. Před založením vyšetření
-                      ho prosím přidej v kartotéce (číselník poskytovatelů).
+                      není v databázi poskytovatelů. Než půjde založit
+                      vyšetření, je třeba ho přidat.
                     </p>
                   </div>
+                  <Button
+                    variant="teal"
+                    onClick={() => setShowLekarForm(true)}
+                    className="shrink-0 h-8 px-3 text-xs"
+                  >
+                    Založit lékaře
+                  </Button>
                 </div>
               )}
 
@@ -553,6 +564,23 @@ export default function EzadankaDetail({
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Sub-modal pro založení nového lékaře (nad eŽádanka modalem).
+        Otevře se z žlutého warning banneru "Žadatel není v naší kartotéce". */}
+    {showLekarForm && view && (
+      <LekarFormModal
+        icp={view.zadatel.icpZadatele ?? ""}
+        defaultDoctorName={view.zadatel.jmeno ?? undefined}
+        onSuccess={() => {
+          // Lékař uložen → varování zmizí (re-set zadatelExists),
+          // tlačítko "Založit vyšetření" se odblokne.
+          setShowLekarForm(false);
+          setZadatelExists("yes");
+        }}
+        onClose={() => setShowLekarForm(false)}
+      />
+    )}
+    </>
   );
 }
 

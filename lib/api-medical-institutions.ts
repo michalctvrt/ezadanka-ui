@@ -2,24 +2,93 @@
  * API klient pro číselník zdravotnických zařízení / poskytovatelů
  * (medical institutions).
  *
- * Používá se v EzadankaDetail — před POST /study si ověřujeme, jestli
- * IČP žadatele z eŽádanky existuje v naší DB. Pokud ne, recepční
- * dostane varování, aby ho nejdřív založila v JSF kartoteře — backend
- * by jinak vrátil 422 ("MedicalInstitution ID xxx not found").
- *
- * TODO ověřit s Václavem: existuje GET /medical-institution/{id}?
- * Pokud ne, použijeme search endpoint.
+ * Používá se ve dvou místech v EzadankaDetail:
+ *   1) Pre-check existence IČP žadatele před POST /study
+ *      (`findMedicalInstitutionById`).
+ *   2) Založení nového lékaře přímo z eŽádanky, když IČP v DB chybí
+ *      (`saveMedicalInstitution`) — recepční nemusí přepínat do JSF.
  */
 
-export interface MedicalInstitutionInfo {
-  /** IČP / ICZ zařízení */
+export interface MedicalSkillInfo {
+  /** Kód odbornosti (např. "001" pro praktického lékaře) */
   id: string;
-  /** Krátký název */
+  /** Název odbornosti */
+  name: string;
+}
+
+export interface MedicalInstitutionInfo {
+  /** IČP zařízení */
+  id: string;
+  /** Krátký popis (typicky jméno doktora) */
   description?: string;
-  /** Plný název / popis */
+  /** Dlouhý popis (typicky celé jméno + adresa) */
   descriptionLong?: string;
-  /** IČO */
-  ico?: string;
+  /** Jméno doktora */
+  doctorName?: string;
+  /** Kontaktní email doktora */
+  doctorEmail?: string;
+  /** Kód odbornosti (FK do `medical-skill`) */
+  idMedicalSkill?: string;
+  /** Detail odbornosti (vrací backend pro pohodlí) */
+  medicalSkillInfo?: MedicalSkillInfo;
+  /** Platnost záznamu do (YYYY-MM-DD) */
+  dateValidTill?: string;
+  /** IČZ zařízení (jiný než IČP) */
+  icz?: string;
+  /** ID v systému CompuGroup Medical */
+  cgmId?: string;
+  /** Kódy XML export definic — typicky ["CGM"], ["EZPRAVA"] nebo obojí */
+  idXmlExportDefinition?: string[];
+}
+
+/**
+ * Tělo požadavku PUT /medical-institution/{id}.
+ * Obsahuje stejná pole jako `MedicalInstitutionInfo`, ale bez `id`
+ * (to je v URL path) a bez `medicalSkillInfo` (read-only).
+ */
+export interface MedicalInstitutionSaveInfo {
+  description: string;
+  descriptionLong: string;
+  doctorName: string;
+  doctorEmail: string;
+  idMedicalSkill: string;
+  dateValidTill?: string | null;
+  icz?: string | null;
+  cgmId?: string | null;
+  idXmlExportDefinition?: string[];
+}
+
+// ─── Search request types pro POST /medical-skill/:search ────────────────
+
+type Comparator =
+  | "EQ"
+  | "NE"
+  | "IN"
+  | "NOT_IN"
+  | "LIKE"
+  | "NOT_LIKE"
+  | "IS_NULL"
+  | "IS_NOT_NULL";
+
+interface BrowseStringFilter {
+  values?: string[];
+  comparator: Comparator;
+}
+
+interface MedicalSkillSearchRequest {
+  searchFilter?: { id?: string };
+  browseFilter?: {
+    id?: BrowseStringFilter;
+    name?: BrowseStringFilter;
+  };
+  orderByFilter?: { column: string; desc?: boolean };
+  limitFilter?: { first?: number; count?: number };
+}
+
+interface MedicalSkillSearchResponse {
+  totalCount?: number;
+  count?: number;
+  data?: MedicalSkillInfo[];
 }
 
 const API_BASE =
@@ -28,7 +97,6 @@ const API_BASE =
 /**
  * Detail poskytovatele podle IČP.
  * Vrátí `null`, pokud poskytovatel v DB neexistuje (HTTP 404).
- * Hodí ostatní HTTP chyby — volající si je má zachytit a graceful-fallback.
  */
 export async function findMedicalInstitutionById(
   id: string
@@ -47,4 +115,82 @@ export async function findMedicalInstitutionById(
     );
   }
   return (await res.json()) as MedicalInstitutionInfo;
+}
+
+/**
+ * Vytvoří (nebo aktualizuje, pokud IČP existuje) poskytovatele.
+ * Endpoint je `PUT /medical-institution/{id}` — Vašek měl v OpenAPI špatný
+ * popis "Search Medical Institutions by filters", ale ve skutečnosti
+ * je to save / upsert.
+ */
+export async function saveMedicalInstitution(
+  id: string,
+  data: MedicalInstitutionSaveInfo
+): Promise<MedicalInstitutionInfo> {
+  const res = await fetch(
+    `${API_BASE}/medical-institution/${encodeURIComponent(id)}`,
+    {
+      method: "PUT",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(data),
+    }
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(
+      `PUT /medical-institution/${id} selhalo HTTP ${res.status}: ${text}`
+    );
+  }
+  return (await res.json()) as MedicalInstitutionInfo;
+}
+
+/**
+ * Číselník odborností pro autocomplete dropdown.
+ * Endpoint je `POST /medical-skill/:search` (analogicky k medical-service).
+ *
+ * @param query — substring v `name`. Prázdný = vrátí prvních N podle ordering.
+ */
+export async function searchMedicalSkills(
+  query: string,
+  limit = 100
+): Promise<MedicalSkillInfo[]> {
+  const trimmed = query.trim();
+
+  const browseFilter: NonNullable<
+    MedicalSkillSearchRequest["browseFilter"]
+  > = {};
+  if (trimmed) {
+    browseFilter.name = {
+      comparator: "LIKE",
+      values: [`%${trimmed}%`],
+    };
+  }
+
+  const body: MedicalSkillSearchRequest = {
+    browseFilter,
+    limitFilter: { first: 0, count: limit },
+    orderByFilter: { column: "id", desc: false },
+  };
+
+  const res = await fetch(`${API_BASE}/medical-skill/:search`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `POST /medical-skill/:search selhalo HTTP ${res.status}`
+    );
+  }
+
+  const data = (await res.json()) as MedicalSkillSearchResponse;
+  return data.data ?? [];
 }
