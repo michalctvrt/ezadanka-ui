@@ -16,9 +16,17 @@
  *   2) Z žádanky (pokud nalezena) získat PID pacienta.
  *   3) Paralelně ověřit existenci pacienta v naší DB (findPatientByPid).
  *   4) Render karta + seznam eŽádanek (4 stavy podle existence pacienta a žádanek).
+ *
+ * **Stav je v URL** (`?q=...`):
+ *   - Recepční zadá kód/RČ a klepne Vyhledat → URL se aktualizuje.
+ *   - Když odejde (např. klik "Nové vyšetření" → JSF) a klepne Zpět v
+ *     prohlížeči, URL se vrátí na předchozí stav a stránka znovu načte
+ *     pacienta. Bez tohohle by browser-back hodil recepční na prázdný
+ *     vyhledávací formulář a musela by znovu zadávat RČ.
  */
 
-import { useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Search, AlertTriangle, CheckCircle2 } from "lucide-react";
 import DcFlipperHeader from "@/components/DcFlipperHeader";
 import EzadankyList from "@/components/EzadankyList";
@@ -53,121 +61,61 @@ type Phase =
 const KOD_PATTERN = /^[A-Z0-9]{8}$/;
 
 export default function Home() {
-  const [query, setQuery] = useState("");
+  // useSearchParams musí být obalený v Suspense (Next 16 App Router pravidlo)
+  return (
+    <Suspense fallback={<HomeSkeleton />}>
+      <HomeInner />
+    </Suspense>
+  );
+}
+
+function HomeInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlQuery = searchParams.get("q") ?? "";
+
+  // Lokální stav inputu — synchronizujeme s URL při změně
+  const [query, setQuery] = useState(urlQuery);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
 
-  const handleSubmit = async () => {
+  /**
+   * Vlastní search logika — volá se při změně URL parametru `q`.
+   * Detekuje typ vstupu (kód vs RČ) a deleguje na příslušnou cestu.
+   */
+  const doSearch = useCallback(async (raw: string) => {
+    setPhase({ kind: "loading", query: raw });
+
+    const isCode = KOD_PATTERN.test(raw.toUpperCase());
+
+    if (isCode) {
+      await searchByCode(raw.toUpperCase(), setPhase);
+    } else {
+      await searchByRc(raw, setPhase);
+    }
+  }, []);
+
+  // Reaguj na změny URL (`?q=...`) — typicky po router.push() a po
+  // browser-back. Spustí search nebo vrátí na idle, podle obsahu.
+  useEffect(() => {
+    if (!urlQuery) {
+      setPhase({ kind: "idle" });
+      setQuery("");
+      return;
+    }
+    setQuery(urlQuery);
+    doSearch(urlQuery);
+  }, [urlQuery, doSearch]);
+
+  const handleSubmit = () => {
     const raw = query.trim();
     if (!raw) {
       alert("Zadej kód eŽádanky nebo rodné číslo pacienta.");
       return;
     }
-
-    setPhase({ kind: "loading", query: raw });
-
-    // Detekce typu vstupu
-    const isCode = KOD_PATTERN.test(raw.toUpperCase());
-
-    if (isCode) {
-      await searchByCode(raw.toUpperCase());
-    } else {
-      await searchByRc(raw);
-    }
-  };
-
-  /**
-   * Vyhledávání podle kódu eŽádanky.
-   *
-   * 1) Najde žádanku v MZČR podle kódu → vytáhne PID pacienta.
-   * 2) Pak udělá **stejný flow jako u RČ**: paralelně načte pacienta
-   *    z naší DB + všechny aktivní žádanky daného pacienta.
-   * Výsledek: úplně stejný stav, jako by recepční rovnou zadala RČ —
-   *    zelený banner, tabulka všech aktivních žádanek, karta pacienta.
-   */
-  const searchByCode = async (code: string) => {
-    // Krok 1: najdi žádanku podle kódu (vrátí 0 nebo 1 položku)
-    let firstHit: FlatZadankaListItem[];
-    try {
-      firstHit = await searchEzadankyByCode(code, { onlyActive: false });
-    } catch (e) {
-      setPhase({
-        kind: "error",
-        query: code,
-        message: (e as Error).message,
-      });
-      return;
-    }
-
-    if (firstHit.length === 0) {
-      setPhase({ kind: "not-found", query: code });
-      return;
-    }
-
-    const pid = firstHit[0].pacient.rid;
-
-    // Krok 2: paralelně — pacient v naší DB + všechny aktivní žádanky
-    const [patientResult, ezadankyResult] = await Promise.allSettled([
-      findPatientByPid(pid),
-      searchEzadankyByRid(pid, { onlyActive: true }),
-    ]);
-
-    if (patientResult.status === "rejected") {
-      setPhase({
-        kind: "error",
-        query: code,
-        message: (patientResult.reason as Error).message,
-      });
-      return;
-    }
-
-    // Když by druhý fetch selhal, máme aspoň tu jednu žádanku z prvního.
-    const ezadanky =
-      ezadankyResult.status === "fulfilled" ? ezadankyResult.value : firstHit;
-
-    setPhase({
-      kind: "loaded",
-      input: code,
-      pid,
-      patient: patientResult.value,
-      ezadanky,
-    });
-  };
-
-  /** Vyhledávání podle rodného čísla pacienta */
-  const searchByRc = async (rc: string) => {
-    const normalized = normalizeRc(rc);
-    const rcInfo = parseRc(normalized);
-    if (!rcInfo.validFormat) {
-      alert(rcInfo.error ?? "Neplatné rodné číslo (musí mít 9 nebo 10 cifer).");
-      setPhase({ kind: "idle" });
-      return;
-    }
-
-    // Paralelně — ať se to ukáže rychle
-    const [patientResult, ezadankyResult] = await Promise.allSettled([
-      findPatientByPid(normalized),
-      searchEzadankyByRid(normalized, { onlyActive: true }),
-    ]);
-
-    if (patientResult.status === "rejected") {
-      setPhase({
-        kind: "error",
-        query: normalized,
-        message: (patientResult.reason as Error).message,
-      });
-      return;
-    }
-
-    const ezadanky =
-      ezadankyResult.status === "fulfilled" ? ezadankyResult.value : [];
-
-    setPhase({
-      kind: "loaded",
-      input: normalized,
-      pid: normalized,
-      patient: patientResult.value,
-      ezadanky,
-    });
+    // Aktualizuj URL — useEffect výše to zachytí a spustí search.
+    // Použijeme push, ne replace, aby browser-back fungoval (přesně co
+    // recepční chtěla — vrátit se na karta pacienta po Nové vyšetření).
+    router.push(`?q=${encodeURIComponent(raw)}`);
   };
 
   return (
@@ -260,6 +208,122 @@ export default function Home() {
       </main>
     </>
   );
+}
+
+function HomeSkeleton() {
+  return (
+    <>
+      <DcFlipperHeader />
+      <main className="min-h-screen py-6 px-6">
+        <div className="max-w-5xl mx-auto">
+          <p className="text-center text-sm text-gray-500">Načítám…</p>
+        </div>
+      </main>
+    </>
+  );
+}
+
+// ─── Search funkce ────────────────────────────────────────────────────────
+
+/**
+ * Vyhledávání podle kódu eŽádanky.
+ *
+ * 1) Najde žádanku v MZČR podle kódu → vytáhne PID pacienta.
+ * 2) Pak udělá **stejný flow jako u RČ**: paralelně načte pacienta
+ *    z naší DB + všechny aktivní žádanky daného pacienta.
+ * Výsledek: úplně stejný stav, jako by recepční rovnou zadala RČ —
+ *    zelený banner, tabulka všech aktivních žádanek, karta pacienta.
+ */
+async function searchByCode(
+  code: string,
+  setPhase: (p: Phase) => void
+): Promise<void> {
+  // Krok 1: najdi žádanku podle kódu (vrátí 0 nebo 1 položku)
+  let firstHit: FlatZadankaListItem[];
+  try {
+    firstHit = await searchEzadankyByCode(code, { onlyActive: false });
+  } catch (e) {
+    setPhase({
+      kind: "error",
+      query: code,
+      message: (e as Error).message,
+    });
+    return;
+  }
+
+  if (firstHit.length === 0) {
+    setPhase({ kind: "not-found", query: code });
+    return;
+  }
+
+  const pid = firstHit[0].pacient.rid;
+
+  // Krok 2: paralelně — pacient v naší DB + všechny aktivní žádanky
+  const [patientResult, ezadankyResult] = await Promise.allSettled([
+    findPatientByPid(pid),
+    searchEzadankyByRid(pid, { onlyActive: true }),
+  ]);
+
+  if (patientResult.status === "rejected") {
+    setPhase({
+      kind: "error",
+      query: code,
+      message: (patientResult.reason as Error).message,
+    });
+    return;
+  }
+
+  // Když by druhý fetch selhal, máme aspoň tu jednu žádanku z prvního.
+  const ezadanky =
+    ezadankyResult.status === "fulfilled" ? ezadankyResult.value : firstHit;
+
+  setPhase({
+    kind: "loaded",
+    input: code,
+    pid,
+    patient: patientResult.value,
+    ezadanky,
+  });
+}
+
+/** Vyhledávání podle rodného čísla pacienta */
+async function searchByRc(
+  rc: string,
+  setPhase: (p: Phase) => void
+): Promise<void> {
+  const normalized = normalizeRc(rc);
+  const rcInfo = parseRc(normalized);
+  if (!rcInfo.validFormat) {
+    alert(rcInfo.error ?? "Neplatné rodné číslo (musí mít 9 nebo 10 cifer).");
+    setPhase({ kind: "idle" });
+    return;
+  }
+
+  // Paralelně — ať se to ukáže rychle
+  const [patientResult, ezadankyResult] = await Promise.allSettled([
+    findPatientByPid(normalized),
+    searchEzadankyByRid(normalized, { onlyActive: true }),
+  ]);
+
+  if (patientResult.status === "rejected") {
+    setPhase({
+      kind: "error",
+      query: normalized,
+      message: (patientResult.reason as Error).message,
+    });
+    return;
+  }
+
+  const ezadanky =
+    ezadankyResult.status === "fulfilled" ? ezadankyResult.value : [];
+
+  setPhase({
+    kind: "loaded",
+    input: normalized,
+    pid: normalized,
+    patient: patientResult.value,
+    ezadanky,
+  });
 }
 
 // ─── Loaded view ──────────────────────────────────────────────────────────
