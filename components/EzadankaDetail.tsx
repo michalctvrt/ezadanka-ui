@@ -14,7 +14,7 @@
  *   - Klik na "Zrušit úpravy" → vrátí se původní data ze žádanky.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Stethoscope, Pencil, X, Loader2 } from "lucide-react";
 import {
   Dialog,
@@ -30,6 +30,8 @@ import {
 } from "@/lib/api-study";
 import type { FlatZadankaDetail } from "@/lib/parser";
 import type { Gender, PatientInfo } from "@/lib/patient-types";
+import VykonyEditor from "./VykonyEditor";
+import { calculateAge } from "@/lib/age";
 
 interface Props {
   /** UUID žádanky (např. "0d54820f-6dcd-47cc-8c85-36b80bb515cf") */
@@ -76,9 +78,24 @@ export default function EzadankaDetail({
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  /**
+   * Výkony vybrané recepční (kód → počet). Předvyplňuje se auto-fill
+   * pravidly při mountu VykonyEditoru. Posílá se do POST /study jako
+   * `medicalServices`. Pokud je prázdné, tlačítko "Založit vyšetření" je
+   * disablované — backend by jinak vrátil 422 ("medicalServices is EMPTY").
+   */
+  const [vybraneSluzby, setVybraneSluzby] = useState<Record<string, number>>(
+    {}
+  );
 
   const isEditing = editedData !== null;
   const view = editedData ?? data;
+
+  // Věk pacienta — pro auto-fill pravidla ve VykonyEditoru
+  const age = useMemo(
+    () => calculateAge(view?.pacient.datumNarozeni ?? null),
+    [view?.pacient.datumNarozeni]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -378,6 +395,17 @@ export default function EzadankaDetail({
                 />
               </Section>
 
+              {/* Editor výkonů — recepční vybírá kódy úkonů.
+                  Zobrazuje se jen, když existuje pacient v naší DB
+                  (jinak nelze vyšetření založit ani s vybranými výkony). */}
+              {patientExists && view.vysetreni.modalita !== "OTHER" && (
+                <VykonyEditor
+                  modalita={view.vysetreni.modalita}
+                  age={age}
+                  onChange={setVybraneSluzby}
+                />
+              )}
+
               {/* Chyba při zakládání vyšetření */}
               {createError && (
                 <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700 flex items-start gap-2">
@@ -420,26 +448,37 @@ export default function EzadankaDetail({
 
                 {pid &&
                   (patientExists ? (
-                    <Button
-                      variant="teal"
-                      onClick={() =>
-                        handleZalozitVysetreni(
-                          view,
-                          patient,
-                          idWorkingplace,
-                          legacyBase,
-                          setCreating,
-                          setCreateError
-                        )
-                      }
-                      disabled={creating}
-                      className="gap-2"
-                    >
-                      {creating && (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                    <div className="flex flex-col items-end gap-1">
+                      <Button
+                        variant="teal"
+                        onClick={() =>
+                          handleZalozitVysetreni(
+                            view,
+                            patient,
+                            idWorkingplace,
+                            legacyBase,
+                            vybraneSluzby,
+                            setCreating,
+                            setCreateError
+                          )
+                        }
+                        disabled={
+                          creating ||
+                          Object.keys(vybraneSluzby).length === 0
+                        }
+                        className="gap-2"
+                      >
+                        {creating && (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        )}
+                        {creating ? "Zakládám…" : "Založit vyšetření"}
+                      </Button>
+                      {Object.keys(vybraneSluzby).length === 0 && (
+                        <span className="text-[11px] text-gray-500 italic">
+                          Vyber alespoň jeden výkon.
+                        </span>
                       )}
-                      {creating ? "Zakládám…" : "Založit vyšetření"}
-                    </Button>
+                    </div>
                   ) : (
                     <span className="text-xs text-gray-500 italic max-w-md text-right">
                       Před založením vyšetření nejprve založ pacienta v
@@ -595,13 +634,17 @@ function composePojistovna(
  * 1) Sestaví draft `StudySaveBasicInfo` z eŽádanky a údajů pacienta.
  * 2) Pošle `POST /CardFileWebWS/rest/study` → vytvoří záznam vyšetření v DB.
  * 3) Po úspěchu naviguje na JSF `/study/edit.xhtml?id=<vrácené ID>`,
- *    kde recepční dovyplní `medicalServices` (kódy úkonů a počty).
+ *    kde recepční vyšetření dokončí (RIS workflow).
+ *
+ * `medicalServices` je mapa kód → počet vybraná recepční ve VykonyEditoru.
+ * Backend vyžaduje aspoň jednu položku, jinak vrátí 422.
  */
 async function handleZalozitVysetreni(
   z: FlatZadankaDetail,
   patient: PatientInfo | null | undefined,
   idWorkingplace: string,
   legacyBase: string,
+  medicalServices: Record<string, number>,
   setCreating: (b: boolean) => void,
   setCreateError: (s: string | null) => void
 ) {
@@ -609,6 +652,11 @@ async function handleZalozitVysetreni(
     setCreateError(
       "Pacient v naší DB nebyl nalezen. Nelze založit vyšetření."
     );
+    return;
+  }
+
+  if (Object.keys(medicalServices).length === 0) {
+    setCreateError("Pro založení vyšetření vyber alespoň jeden výkon.");
     return;
   }
 
@@ -639,7 +687,7 @@ async function handleZalozitVysetreni(
         },
         {
           idWorkingplace,
-          medicalServices: {}, // recepční doplní v JSF
+          medicalServices,
         }
       )
     );
