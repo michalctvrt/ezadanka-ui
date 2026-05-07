@@ -81,6 +81,12 @@ export default function LekarFormModal({
   const [skillSearching, setSkillSearching] = useState(false);
   const [skillDropdownOpen, setSkillDropdownOpen] = useState(false);
   const skillBoxRef = useRef<HTMLDivElement>(null);
+  /**
+   * Je `POST /medical-skill/:search` dostupný? Vašek momentálně nemá
+   * číselník odborností v API (404). Když selže fetch, přepneme
+   * na plain text input — recepční napíše kód odbornosti ručně.
+   */
+  const [skillSearchAvailable, setSkillSearchAvailable] = useState(true);
 
   // ─── Submit state ─────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false);
@@ -107,15 +113,19 @@ export default function LekarFormModal({
   }, [skillQuery]);
 
   // Načti všechny odbornosti hned při otevření, aby uživatel viděl seznam
-  // bez psaní (typický UX pattern u krátkých číselníků).
+  // bez psaní (typický UX pattern u krátkých číselníků). Pokud endpoint
+  // neexistuje (404), přepneme na manual input.
   useEffect(() => {
     let cancelled = false;
     searchMedicalSkills("", 100)
       .then((r) => {
-        if (!cancelled) setSkillResults(r);
+        if (!cancelled) {
+          setSkillResults(r);
+          setSkillSearchAvailable(true);
+        }
       })
       .catch(() => {
-        // tichý fallback — recepční bude muset napsat ručně
+        if (!cancelled) setSkillSearchAvailable(false);
       });
     return () => {
       cancelled = true;
@@ -254,17 +264,27 @@ export default function LekarFormModal({
             </Field>
           </div>
 
-          {/* Odbornost — autocomplete s číselníku */}
+          {/* Odbornost — autocomplete z číselníku, fallback na plain input */}
           <div ref={skillBoxRef}>
-            <Field label="Odbornost" required>
+            <Field
+              label="Odbornost"
+              required
+              hint={
+                skillSearchAvailable
+                  ? undefined
+                  : "číselník nedostupný — napiš kód ručně, např. 001"
+              }
+            >
               {idMedicalSkill ? (
                 <div className="flex items-center gap-2">
                   <code className="font-mono text-xs font-semibold text-brand-teal-700 px-2 py-1 bg-brand-teal-50 rounded">
                     {idMedicalSkill}
                   </code>
-                  <span className="text-sm text-gray-900 flex-1">
-                    {skillName}
-                  </span>
+                  {skillName && (
+                    <span className="text-sm text-gray-900 flex-1">
+                      {skillName}
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -272,12 +292,13 @@ export default function LekarFormModal({
                       setSkillName("");
                       setSkillDropdownOpen(true);
                     }}
-                    className="text-xs text-brand-teal-700 hover:underline"
+                    className="text-xs text-brand-teal-700 hover:underline ml-auto"
                   >
                     Změnit
                   </button>
                 </div>
-              ) : (
+              ) : skillSearchAvailable ? (
+                // ── Mode A: autocomplete dropdown z číselníku ──────────
                 <div className="relative">
                   <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                   <input
@@ -322,6 +343,21 @@ export default function LekarFormModal({
                     </div>
                   )}
                 </div>
+              ) : (
+                // ── Mode B: fallback na plain input ────────────────────
+                <input
+                  type="text"
+                  value={skillQuery}
+                  onChange={(e) => {
+                    setSkillQuery(e.target.value);
+                    // při psaní ručně rovnou nastavovat idMedicalSkill,
+                    // ať uživatel nemusí "potvrzovat"
+                    setIdMedicalSkill(e.target.value.trim());
+                    setSkillName("");
+                  }}
+                  placeholder="Kód odbornosti (např. 001)"
+                  className={inputCls}
+                />
               )}
             </Field>
           </div>

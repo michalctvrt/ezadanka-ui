@@ -58,39 +58,6 @@ export interface MedicalInstitutionSaveInfo {
   idXmlExportDefinition?: string[];
 }
 
-// ─── Search request types pro POST /medical-skill/:search ────────────────
-
-type Comparator =
-  | "EQ"
-  | "NE"
-  | "IN"
-  | "NOT_IN"
-  | "LIKE"
-  | "NOT_LIKE"
-  | "IS_NULL"
-  | "IS_NOT_NULL";
-
-interface BrowseStringFilter {
-  values?: string[];
-  comparator: Comparator;
-}
-
-interface MedicalSkillSearchRequest {
-  searchFilter?: { id?: string };
-  browseFilter?: {
-    id?: BrowseStringFilter;
-    name?: BrowseStringFilter;
-  };
-  orderByFilter?: { column: string; desc?: boolean };
-  limitFilter?: { first?: number; count?: number };
-}
-
-interface MedicalSkillSearchResponse {
-  totalCount?: number;
-  count?: number;
-  data?: MedicalSkillInfo[];
-}
-
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "/CardFileWebWS/rest";
 
@@ -149,48 +116,32 @@ export async function saveMedicalInstitution(
 }
 
 /**
- * Číselník odborností pro autocomplete dropdown.
- * Endpoint je `POST /medical-skill/:search` (analogicky k medical-service).
+ * Číselník odborností — Vašek vystavuje jako jednoduchý
+ * `GET /medical-skill` bez search/paging. Vrací celý seznam jako pole.
+ * Filtrování query si dělá klient na své straně.
  *
- * @param query — substring v `name`. Prázdný = vrátí prvních N podle ordering.
+ * @param query — substring v `id` nebo `name`. Prázdný = celý seznam.
  */
 export async function searchMedicalSkills(
   query: string,
   limit = 100
 ): Promise<MedicalSkillInfo[]> {
-  const trimmed = query.trim();
-
-  const browseFilter: NonNullable<
-    MedicalSkillSearchRequest["browseFilter"]
-  > = {};
-  if (trimmed) {
-    browseFilter.name = {
-      comparator: "LIKE",
-      values: [`%${trimmed}%`],
-    };
-  }
-
-  const body: MedicalSkillSearchRequest = {
-    browseFilter,
-    limitFilter: { first: 0, count: limit },
-    orderByFilter: { column: "id", desc: false },
-  };
-
-  const res = await fetch(`${API_BASE}/medical-skill/:search`, {
-    method: "POST",
+  const res = await fetch(`${API_BASE}/medical-skill`, {
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify(body),
+    headers: { Accept: "application/json" },
   });
   if (!res.ok) {
-    throw new Error(
-      `POST /medical-skill/:search selhalo HTTP ${res.status}`
-    );
+    throw new Error(`GET /medical-skill selhalo HTTP ${res.status}`);
   }
 
-  const data = (await res.json()) as MedicalSkillSearchResponse;
-  return data.data ?? [];
+  const all = (await res.json()) as MedicalSkillInfo[];
+  const trimmed = query.trim().toLowerCase();
+  const filtered = trimmed
+    ? all.filter(
+        (s) =>
+          s.id.toLowerCase().includes(trimmed) ||
+          (s.name ?? "").toLowerCase().includes(trimmed)
+      )
+    : all;
+  return filtered.slice(0, limit);
 }
