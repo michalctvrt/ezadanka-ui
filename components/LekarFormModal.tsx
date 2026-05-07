@@ -178,17 +178,20 @@ export default function LekarFormModal({
     setSaving(true);
     setSaveError(null);
 
+    // Sestavíme payload jen z polí, která mají hodnotu — Vašek nezvládá
+    // null v nepovinných polích ("Error deserializing object from
+    // entity stream"), takže je raději úplně neposíláme.
     const payload: MedicalInstitutionSaveInfo = {
       description: description.trim(),
       descriptionLong: descriptionLong.trim(),
       doctorName: doctorName.trim(),
       doctorEmail: doctorEmail.trim(),
       idMedicalSkill: idMedicalSkill.trim(),
-      icz: icz.trim() || null,
-      cgmId: cgmId.trim() || null,
-      idXmlExportDefinition: xmlExport.length > 0 ? xmlExport : undefined,
-      dateValidTill: dateValidTill || null,
     };
+    if (icz.trim()) payload.icz = icz.trim();
+    if (cgmId.trim()) payload.cgmId = cgmId.trim();
+    if (xmlExport.length > 0) payload.idXmlExportDefinition = xmlExport;
+    if (dateValidTill) payload.dateValidTill = dateValidTill;
 
     try {
       const saved = await saveMedicalInstitution(icp, payload);
