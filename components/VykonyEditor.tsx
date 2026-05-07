@@ -15,7 +15,7 @@
  * v `medicalServices` při POST /study.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Minus, Trash2, Search, AlertTriangle } from "lucide-react";
 import {
   searchMedicalServices,
@@ -47,7 +47,13 @@ export interface SelectedService {
 export default function VykonyEditor({ modalita, age, onChange }: Props) {
   const [selected, setSelected] = useState<SelectedService[]>([]);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<MedicalServiceInfo[]>([]);
+  /**
+   * Všechny výkony pro danou modalitu — fetchneme jednou při mountu/změně
+   * modality a klient si je filtruje sám podle query (přes id, description
+   * i descriptionLong). Backend vrací v jedné dávce limit 500 řádků,
+   * což pro RTG/SONO/MR/CT s přehledem stačí.
+   */
+  const [allResults, setAllResults] = useState<MedicalServiceInfo[]>([]);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -105,32 +111,39 @@ export default function VykonyEditor({ modalita, age, onChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
-  // Debounced search při změně query
+  // Při změně modality nactíme všechny výkony pro danou kategorii.
+  // Filtrace podle query se pak děje klient-side (viz `results` níže).
   useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
-
     let cancelled = false;
-    const t = setTimeout(async () => {
-      setSearching(true);
-      setError(null);
-      try {
-        const r = await searchMedicalServices(query, modalita, 30);
-        if (!cancelled) setResults(r);
-      } catch (e) {
+    setSearching(true);
+    setError(null);
+    searchMedicalServices("", modalita, 500)
+      .then((r) => {
+        if (!cancelled) setAllResults(r);
+      })
+      .catch((e) => {
         if (!cancelled) setError((e as Error).message);
-      } finally {
+      })
+      .finally(() => {
         if (!cancelled) setSearching(false);
-      }
-    }, 300);
-
+      });
     return () => {
       cancelled = true;
-      clearTimeout(t);
     };
-  }, [query, modalita]);
+  }, [modalita]);
+
+  // Klient-side filtrace přes id, description i descriptionLong.
+  // Hledání je instant (žádný debounce), pracujeme s lokálním seznamem.
+  const results = useMemo(() => {
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return allResults;
+    return allResults.filter(
+      (s) =>
+        s.id.toLowerCase().includes(trimmed) ||
+        (s.description ?? "").toLowerCase().includes(trimmed) ||
+        (s.descriptionLong ?? "").toLowerCase().includes(trimmed)
+    );
+  }, [allResults, query]);
 
   // Klik mimo dropdown → zavře ho
   useEffect(() => {
@@ -164,7 +177,6 @@ export default function VykonyEditor({ modalita, age, onChange }: Props) {
       ];
     });
     setQuery("");
-    setResults([]);
     setShowDropdown(false);
   };
 
@@ -205,18 +217,21 @@ export default function VykonyEditor({ modalita, age, onChange }: Props) {
           className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand-teal focus:border-transparent"
         />
 
-        {/* Dropdown s výsledky */}
-        {showDropdown && (query.trim() || searching || results.length > 0) && (
+        {/* Dropdown s výsledky — otevírá se hned při focusu, recepční vidí
+            celý seznam výkonů pro modalitu i bez psaní (může listovat). */}
+        {showDropdown && (
           <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-72 overflow-y-auto">
             {searching && (
-              <p className="p-3 text-xs text-gray-500">Hledám…</p>
+              <p className="p-3 text-xs text-gray-500">Načítám výkony…</p>
             )}
             {error && (
               <p className="p-3 text-xs text-red-600">Chyba: {error}</p>
             )}
-            {!searching && !error && results.length === 0 && query.trim() && (
+            {!searching && !error && results.length === 0 && (
               <p className="p-3 text-xs text-gray-500">
-                Žádné výkony nenalezeny.
+                {query.trim()
+                  ? "Žádné výkony pro tento dotaz."
+                  : `Žádné výkony pro modalitu ${modalita}.`}
               </p>
             )}
             {!searching &&

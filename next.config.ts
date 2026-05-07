@@ -30,7 +30,11 @@ const nextConfig: NextConfig = {
   // basePath jen v produkci — v dev nás brzdí (Next dev server vždy běží na /)
   basePath: isDev ? "" : basePath,
 
-  trailingSlash: true,
+  // POZN.: Mělo to být `true` pro produkční static export (pretty URLs),
+  // ale Next dev server tím přidává `/` i ke všem fetch volání API:
+  //   `PUT /medical-institution/29224012/` ← Vaškův Jersey nedeserializuje
+  // Pro REST API to dělá víc škody než užitku — vypnuto.
+  trailingSlash: false,
 
   // Static export neumí Image optimization
   images: { unoptimized: true },
