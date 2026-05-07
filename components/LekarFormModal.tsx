@@ -70,7 +70,9 @@ export default function LekarFormModal({
   const [doctorEmail, setDoctorEmail] = useState(defaultDoctorEmail ?? "");
   const [idMedicalSkill, setIdMedicalSkill] = useState<string>("");
   const [skillName, setSkillName] = useState<string>("");
-  const [icz, setIcz] = useState("");
+  // IČZ defaultně stejné jako IČP — typicky pro jednolékařské ambulance
+  // se shodují. Recepční ho může přepsat, pokud má lékař jiné IČZ.
+  const [icz, setIcz] = useState(icp);
   const [cgmId, setCgmId] = useState("");
   const [xmlExport, setXmlExport] = useState<string[]>([]);
   const [dateValidTill, setDateValidTill] = useState<string>(""); // YYYY-MM-DD
@@ -178,19 +180,22 @@ export default function LekarFormModal({
     setSaving(true);
     setSaveError(null);
 
-    // Sestavíme payload jen z polí, která mají hodnotu — Vašek nezvládá
-    // null v nepovinných polích ("Error deserializing object from
-    // entity stream"), takže je raději úplně neposíláme.
+    // Sestavíme payload — povinná pole vždy, nepovinná jen když je hodnota.
+    // Vaškův Jackson deserializer si stěžoval ("Error deserializing object
+    // from entity stream") při omitnutí array, takže `idXmlExportDefinition`
+    // posíláme vždy (i prázdné []).
+    // IČZ defaultně = IČP, ale recepční ho může vyprázdnit; pak fallback
+    // na IČP, ať tam vždy něco je.
     const payload: MedicalInstitutionSaveInfo = {
       description: description.trim(),
       descriptionLong: descriptionLong.trim(),
       doctorName: doctorName.trim(),
       doctorEmail: doctorEmail.trim(),
       idMedicalSkill: idMedicalSkill.trim(),
+      icz: icz.trim() || icp,
+      idXmlExportDefinition: xmlExport, // vždy posíláme [] nebo s hodnotami
     };
-    if (icz.trim()) payload.icz = icz.trim();
     if (cgmId.trim()) payload.cgmId = cgmId.trim();
-    if (xmlExport.length > 0) payload.idXmlExportDefinition = xmlExport;
     if (dateValidTill) payload.dateValidTill = dateValidTill;
 
     try {
@@ -366,7 +371,7 @@ export default function LekarFormModal({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="IČZ" hint="nepovinné">
+            <Field label="IČZ" hint="default = IČP, můžeš změnit">
               <input
                 type="text"
                 value={icz}
