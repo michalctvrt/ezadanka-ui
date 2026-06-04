@@ -57,7 +57,7 @@ export async function searchMedicalServices(
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      Accept: "application/json",
+      Accept: "application/json, application/problem+json",
     },
     body: JSON.stringify(body),
   });
@@ -79,7 +79,7 @@ export async function findMedicalServiceById(
     `${API_BASE}/medical-service/${encodeURIComponent(id)}`,
     {
       credentials: "include",
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json, application/problem+json" },
     }
   );
   if (res.status === 404) return null;

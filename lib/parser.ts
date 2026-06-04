@@ -60,21 +60,38 @@ export interface FlatZadankaListItem {
   datumVytvoreni: string | null;
   /** Pacient — jen pro přehled v seznamu */
   pacient: {
+    /** PID = test ID */
     rid: string;
+    /** Skutečné RČ z `cisloPojistence` (`null` když chybí) */
+    cisloPojistence: string | null;
     jmeno: string;
     prijmeni: string;
     /** Datum narození ze MZČR API (YYYY-MM-DD) — pro hlavičku pacienta nad seznamem */
     datumNarozeni: string | null;
+    /** Kontaktní email pacienta (může chybět) */
+    email: string | null;
+    /** Plná adresa */
+    adresa: string | null;
   };
   /** Žadatel — kdo žádanku napsal */
   zadatel: string;
 }
 
 export interface FlatPacient {
+  /** PID — test ID / RID (typicky 9882826031, nesouvisí s RČ) */
   rid: string;
+  /**
+   * Skutečné RČ z eŽádanky (`cisloPojistence`, 10 cifer bez lomítka).
+   * Když chybí, pro UI použijeme jako fallback `rid`.
+   */
+  cisloPojistence: string | null;
   jmeno: string;
   prijmeni: string;
   datumNarozeni: string | null;
+  /** Kontaktní email z eŽádanky (může chybět) */
+  email: string | null;
+  /** Plná adresa jako jeden řádek (z RÚIAN) */
+  adresa: string | null;
   /** ICD-10 kód pojišťovny ("207", "111", ...) */
   pojistovnaKod: string | null;
   pojistovnaNazev: string | null;
@@ -189,9 +206,13 @@ export function flattenListItem(
     datumVytvoreni: raw.zasilka?.datumVytvoreni ?? null,
     pacient: {
       rid: raw.zasilka?.pacient ?? "",
+      cisloPojistence:
+        nullIfEmpty(raw.zasilka?.pacientData?.cisloPojistence) ?? null,
       jmeno: raw.zasilka?.pacientData?.jmeno ?? "",
       prijmeni: raw.zasilka?.pacientData?.prijmeni ?? "",
       datumNarozeni: raw.zasilka?.pacientData?.datumNarozeni ?? null,
+      email: nullIfEmpty(raw.zasilka?.pacientData?.kontaktniEmail) ?? null,
+      adresa: nullIfEmpty(raw.zasilka?.pacientData?.adresaCela) ?? null,
     },
     zadatel: composePersonName(raw.zasilka?.autorData) || "—",
   };
@@ -226,9 +247,13 @@ export function flattenDetail(dto: NactiZadankuDto): FlatZadankaDetail {
 
     pacient: {
       rid: raw.zasilka?.pacient ?? "",
+      cisloPojistence:
+        nullIfEmpty(raw.zasilka?.pacientData?.cisloPojistence) ?? null,
       jmeno: raw.zasilka?.pacientData?.jmeno ?? "",
       prijmeni: raw.zasilka?.pacientData?.prijmeni ?? "",
       datumNarozeni: raw.zasilka?.pacientData?.datumNarozeni ?? null,
+      email: nullIfEmpty(raw.zasilka?.pacientData?.kontaktniEmail) ?? null,
+      adresa: nullIfEmpty(raw.zasilka?.pacientData?.adresaCela) ?? null,
       pojistovnaKod: raw.pacientPojistovna?.kod ?? null,
       pojistovnaNazev: raw.pacientPojistovna?.nazev ?? null,
     },

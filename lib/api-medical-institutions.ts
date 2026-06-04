@@ -72,7 +72,7 @@ export async function findMedicalInstitutionById(
     `${API_BASE}/medical-institution/${encodeURIComponent(id)}`,
     {
       credentials: "include",
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json, application/problem+json" },
     }
   );
   if (res.status === 404) return null;
@@ -101,7 +101,7 @@ export async function saveMedicalInstitution(
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        Accept: "application/json",
+        Accept: "application/json, application/problem+json",
       },
       body: JSON.stringify(data),
     }
@@ -128,7 +128,7 @@ export async function searchMedicalSkills(
 ): Promise<MedicalSkillInfo[]> {
   const res = await fetch(`${API_BASE}/medical-skill`, {
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json, application/problem+json" },
   });
   if (!res.ok) {
     throw new Error(`GET /medical-skill selhalo HTTP ${res.status}`);

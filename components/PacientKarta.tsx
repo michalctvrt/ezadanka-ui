@@ -61,8 +61,20 @@ export const EMPTY_PACIENT_KARTA_DATA: PacientKartaInitialData = {
 
 
 interface Props {
-  /** Rodné číslo bez lomítka */
+  /**
+   * Identifikátor pacienta v naší DB (RID / PID).
+   * Pro test pacienty je to umělý PID (např. `9882826031`), pro běžné
+   * pacienty je to skutečné RČ. Neslouží přímo k zobrazení — to dělá
+   * `displayRc` (viz dál).
+   */
   pid: string;
+  /**
+   * RČ pacienta, které se má **zobrazit** v poli "Rodné číslo".
+   * Default = `pid`. Pokud máme `cisloPojistence` z eŽádanky
+   * (skutečné RČ, např. `6911103815`), předáme ho sem, ať recepční
+   * vidí reálné číslo, ne test PID.
+   */
+  displayRc?: string;
   /** Předvyplněná data — z naší DB nebo z eŽádanky nebo z RČ */
   initial: PacientKartaInitialData;
   /** "existing" = update režim, "new" = nový pacient */
@@ -82,11 +94,14 @@ const DEFAULT_LEGACY_BASE =
 
 export default function PacientKarta({
   pid,
+  displayRc,
   initial,
   mode,
   legacyBase = DEFAULT_LEGACY_BASE,
   onSaved,
 }: Props) {
+  // RČ zobrazené v hlavičce karty a v poli "Rodné číslo" — default = pid
+  const shownRc = displayRc ?? pid;
   const [form, setForm] = useState<PacientKartaInitialData>(initial);
   const [insuranceCompanies, setInsuranceCompanies] = useState<
     InsuranceCompanyInfo[]
@@ -203,7 +218,7 @@ export default function PacientKarta({
               : "Založení nového pacienta"}
           </h2>
           <code className="text-sm font-mono text-brand-teal-700 ml-1">
-            {formatRc(pid)}
+            {formatRc(shownRc)}
           </code>
         </div>
 
@@ -247,7 +262,7 @@ export default function PacientKarta({
         {/* Sekce: Identifikace */}
         <Section title="Identifikace">
           <Row>
-            <Field label="Rodné číslo" value={formatRc(pid)} readOnly />
+            <Field label="Rodné číslo" value={formatRc(shownRc)} readOnly />
             <Field
               label="Datum narození *"
               type="date"

@@ -34,9 +34,28 @@ export interface PolozkaCiselnikuDto {
 export interface Osoba {
   jmeno?: string;
   prijmeni?: string;
+  titulPred?: string;
   datumNarozeni?: string; // YYYY-MM-DD
   preferovanyJazyk?: string;
   kodPojisteni?: string;
+
+  // ─ Rozšířené pole MZČR (přidáno do API v červnu 2026) ──────────────────
+  /** Skutečné RČ pacienta (10 cifer bez lomítka) — bývá ≠ rid (test PID) */
+  cisloPojistence?: string;
+  /** RID = test PID (pro non-rezidenty / cizince) */
+  rid?: string;
+  /** Kontaktní email pacienta z eŽádanky */
+  kontaktniEmail?: string;
+  /** Adresa pacienta jako jeden řádek ("město, ulice, číslo") */
+  adresaCela?: string;
+  /** RÚIAN ID adresy */
+  ruianId?: string;
+  /** IČO (u poskytovatelů) */
+  ico?: string;
+  /** Název (u poskytovatelů) */
+  nazev?: string;
+  /** krzpId zdravotnického pracovníka */
+  krzpId?: string;
 }
 
 // ─── Hlavní entity ────────────────────────────────────────────────────────

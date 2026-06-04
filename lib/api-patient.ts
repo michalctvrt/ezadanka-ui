@@ -28,7 +28,7 @@ export async function findPatientByPid(
     `${API_BASE}/patient/${encodeURIComponent(pid)}`,
     {
       credentials: "include",
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json, application/problem+json" },
     }
   );
 
@@ -54,7 +54,7 @@ export async function savePatientData(
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        Accept: "application/json",
+        Accept: "application/json, application/problem+json",
       },
       body: JSON.stringify(data),
     }
@@ -70,7 +70,7 @@ export async function listInsuranceCompanies(): Promise<
 > {
   const res = await fetch(`${API_BASE}/insurance-company`, {
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json, application/problem+json" },
   });
   if (!res.ok) throw new Error(await formatError(res));
   return (await res.json()) as InsuranceCompanyInfo[];

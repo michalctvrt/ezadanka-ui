@@ -347,6 +347,12 @@ function Loaded({
     ? mapFromEzadanka(ezadanky[0], pid)
     : mapFromRc(pid);
 
+  // Skutečné RČ pro zobrazení v Kartě pacienta — preferujeme `cisloPojistence`
+  // z eŽádanky (test PID jinak vede k formátovanému falešnému RČ "988282/6031").
+  const displayRc = maEzadanky
+    ? ezadanky[0].pacient.cisloPojistence ?? pid
+    : pid;
+
   return (
     <div className="space-y-6">
       {/* Banner s upozorněním na eŽádanky — jen pokud existují */}
@@ -378,6 +384,7 @@ function Loaded({
       {/* Karta pacienta — vždy, jen v jiném módu */}
       <PacientKarta
         pid={pid}
+        displayRc={displayRc}
         initial={initial}
         mode={existuje ? "existing" : "new"}
       />
@@ -409,13 +416,17 @@ function mapFromEzadanka(
   e: FlatZadankaListItem,
   pid: string
 ): PacientKartaInitialData {
-  const rcInfo = parseRc(pid);
+  // Pro derivaci data narození / pohlaví preferujeme `cisloPojistence`
+  // (skutečné RČ) před PID — z PID test pacientů by to vyšlo špatně.
+  const realRc = e.pacient.cisloPojistence ?? pid;
+  const rcInfo = parseRc(realRc);
   return {
     ...EMPTY_PACIENT_KARTA_DATA,
     firstName: capitalize(e.pacient.jmeno),
     lastName: capitalize(e.pacient.prijmeni),
     birthDate: e.pacient.datumNarozeni ?? rcInfo.birthDate ?? "",
     gender: rcInfo.gender ?? "",
+    email: e.pacient.email ?? "",
   };
 }
 

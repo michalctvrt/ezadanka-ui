@@ -26,6 +26,14 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "/CardFileWebWS/rest";
 
 /**
+ * Některé Vaškovy endpointy (typicky GET /ezadanka/{id}) produkují
+ * `application/problem+json` (RFC 7807) místo `application/json`.
+ * Pokud klient pošle jen `Accept: application/json`, Jersey vrátí 406/422.
+ * Posíláme obojí, ať Vašek najde shodu.
+ */
+const ACCEPT = "application/json, application/problem+json";
+
+/**
  * Vyhledá aktivní eŽádanky pacienta podle RČ (PID).
  * Volá `GET /ezadanka?pid={rid}&onlyActive={onlyActive}`.
  */
@@ -40,7 +48,7 @@ export async function searchEzadankyByRid(
 
   const res = await fetch(`${API_BASE}/ezadanka?${params.toString()}`, {
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: ACCEPT },
   });
   if (!res.ok) throw new Error(await formatBackendError(res));
 
@@ -65,7 +73,7 @@ export async function searchEzadankyByCode(
 
   const res = await fetch(`${API_BASE}/ezadanka?${params.toString()}`, {
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: ACCEPT },
   });
   if (!res.ok) throw new Error(await formatBackendError(res));
 
@@ -84,7 +92,7 @@ export async function getEzadankaById(
     `${API_BASE}/ezadanka/${encodeURIComponent(id)}`,
     {
       credentials: "include",
-      headers: { Accept: "application/json" },
+      headers: { Accept: ACCEPT },
     }
   );
   if (!res.ok) throw new Error(await formatBackendError(res));
