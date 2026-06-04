@@ -37,6 +37,11 @@ export interface MedicalRequest {
 }
 
 export interface StudySaveBasicInfo {
+  /**
+   * PID pacienta — Vašek to vyhodil z `patientData` (kde to bylo dřív)
+   * a posunul na root úroveň `StudySaveBasicInfo`. Required.
+   */
+  pid: string;
   patientData: PatientDataSaveInfo;
   studyDate?: string;
   remark?: string;
@@ -46,7 +51,7 @@ export interface StudySaveBasicInfo {
   flagUrgent: boolean;
   /** Modalita: "RTG", "SONO", "MR", "CT" */
   idMedicalServiceCategory: string;
-  /** Map kód_výkonu → počet (např. {"89117": 1}). Dnes nevyplňujeme. */
+  /** Map kód_výkonu → počet (např. {"89117": 1}). */
   medicalServices: Record<string, number>;
   flagSelfPay: boolean;
   medicalRequest: MedicalRequest;
@@ -105,15 +110,18 @@ export async function findStudyById(id: number): Promise<StudyInfo> {
  */
 export function buildStudyDraftFromEzadanka(
   ez: FlatZadankaDetail,
-  patient: PatientDataSaveInfo,
+  patient: PatientDataSaveInfo & { pid: string },
   options: {
     idWorkingplace: string;
     medicalServices?: Record<string, number>;
     idCatInsuranceType?: number;
   }
 ): StudySaveBasicInfo {
+  // pid z patientData vyjmout, posílá se na root úroveň
+  const { pid, ...patientDataWithoutPid } = patient;
   return {
-    patientData: patient,
+    pid,
+    patientData: patientDataWithoutPid,
 
     idWorkingplace: options.idWorkingplace,
     medicalServices: options.medicalServices ?? {},

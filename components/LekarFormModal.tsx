@@ -31,6 +31,10 @@ import {
   type MedicalInstitutionSaveInfo,
   type MedicalSkillInfo,
 } from "@/lib/api-medical-institutions";
+import {
+  listXmlExportDefinitions,
+  type XmlExportDefinitionInfo,
+} from "@/lib/api-configuration";
 
 interface Props {
   /** IČP žadatele z eŽádanky — read-only v formuláři */
@@ -48,10 +52,30 @@ interface Props {
   onClose: () => void;
 }
 
-/** XML export typy — kódy do pole `idXmlExportDefinition` */
-const XML_EXPORT_OPTIONS = [
-  { code: "CGM", label: "CGM XML Export" },
-  { code: "EZPRAVA", label: "Ezprava XML Export" },
+/**
+ * XML export typy — fallback pro případ, že `/configuration/xmlExportDefinitions`
+ * endpoint není dostupný. Reálně se ale natáhne dynamicky z backendu při
+ * mountu modalu (Vaškův admin tam může mít jiné než CGM/EZPRAVA).
+ */
+const XML_EXPORT_FALLBACK: XmlExportDefinitionInfo[] = [
+  {
+    id: "CGM",
+    name: "CGM XML Export",
+    exportDir: "",
+    exportSubdir: "",
+    xslt: "",
+    flagEnabled: true,
+    flagAlwaysExport: false,
+  },
+  {
+    id: "EZPRAVA",
+    name: "Ezprava XML Export",
+    exportDir: "",
+    exportSubdir: "",
+    xslt: "",
+    flagEnabled: true,
+    flagAlwaysExport: false,
+  },
 ];
 
 export default function LekarFormModal({
@@ -76,6 +100,11 @@ export default function LekarFormModal({
   const [cgmId, setCgmId] = useState("");
   const [xmlExport, setXmlExport] = useState<string[]>([]);
   const [dateValidTill, setDateValidTill] = useState<string>(""); // YYYY-MM-DD
+
+  // ─── XML export definice — fetch z /configuration při mountu ─────────
+  const [xmlExportOptions, setXmlExportOptions] = useState<
+    XmlExportDefinitionInfo[]
+  >(XML_EXPORT_FALLBACK);
 
   // ─── Skills autocomplete state ────────────────────────────────────────
   const [skillQuery, setSkillQuery] = useState("");
@@ -128,6 +157,25 @@ export default function LekarFormModal({
       })
       .catch(() => {
         if (!cancelled) setSkillSearchAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Načti XML export definice z `/configuration` — Vašek tam může mít
+  // víc než CGM/EZPRAVA (např. nový import systém). Když fetch selže,
+  // zůstane fallback hardcoded ["CGM", "EZPRAVA"].
+  useEffect(() => {
+    let cancelled = false;
+    listXmlExportDefinitions()
+      .then((defs) => {
+        if (cancelled) return;
+        const enabled = defs.filter((d) => d.flagEnabled);
+        if (enabled.length > 0) setXmlExportOptions(enabled);
+      })
+      .catch(() => {
+        // tichý fallback — zůstaneme s XML_EXPORT_FALLBACK
       });
     return () => {
       cancelled = true;
@@ -390,21 +438,21 @@ export default function LekarFormModal({
             </Field>
           </div>
 
-          {/* XML export */}
+          {/* XML export — dynamický seznam z /configuration/xmlExportDefinitions */}
           <Field label="XML export" hint="zaškrtni, pokud je s lékařem propojen přes daný systém">
             <div className="flex flex-wrap gap-4 mt-1">
-              {XML_EXPORT_OPTIONS.map((o) => (
+              {xmlExportOptions.map((o) => (
                 <label
-                  key={o.code}
+                  key={o.id}
                   className="flex items-center gap-2 text-sm text-gray-900 cursor-pointer"
                 >
                   <input
                     type="checkbox"
-                    checked={xmlExport.includes(o.code)}
-                    onChange={() => toggleXmlExport(o.code)}
+                    checked={xmlExport.includes(o.id)}
+                    onChange={() => toggleXmlExport(o.id)}
                     className="w-4 h-4 rounded border-gray-300 text-brand-teal-600 focus:ring-brand-teal"
                   />
-                  {o.label}
+                  {o.name}
                 </label>
               ))}
             </div>

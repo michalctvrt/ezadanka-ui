@@ -38,9 +38,14 @@ export interface PatientInfo {
   patientDataInfo: PatientDataInfo;
 }
 
-/** Tělo POST `/patient/{pid}` — vytvoření nebo update pacienta */
+/**
+ * Tělo POST `/patient/{pid}` — vytvoření nebo update pacienta.
+ *
+ * POZN.: `pid` **NENÍ** v body — je v URL path. Vašek to refaktoroval
+ * v květnu 2026, vyhodil ho z body, protože byl redundantní s URL.
+ * Náš API klient (`api-patient.ts`) ho proto v body neposílá.
+ */
 export interface PatientDataSaveInfo {
-  pid: string;
   idInsuranceCompany?: string | null;
   birthDate?: string;
   gender?: Gender;

@@ -143,8 +143,8 @@ export default function PacientKarta({
     // Pro string pole posíláme prázdný řetězec ("") místo null, když je
     // pole prázdné. Václavův backend pravděpodobně ignoruje `null` (chápe
     // ho jako "nepřišlo, neměnit"). Prázdný string = explicit "smaž to".
+    // POZN.: `pid` v body NENÍ — Vašek ho vyhodil, je jen v URL path.
     const request: PatientDataSaveInfo = {
-      pid,
       firstName: form.firstName.trim(),
       middleName: form.middleName.trim(),
       lastName: form.lastName.trim(),
