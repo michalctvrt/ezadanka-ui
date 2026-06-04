@@ -267,16 +267,23 @@ async function searchByCode(
     return;
   }
 
-  // PID = skutečné RČ (`cisloPojistence`), fallback na `rid` pokud chybí.
-  // Pro test pacienty MZČR posílá test rid (`9882826031`), který neprochází
-  // checksum, ale `cisloPojistence` ano (`6911103815`).
-  const pid =
+  // Vašek používá DVA různé identifikátory pro pacienta:
+  //  - patientPid = `cisloPojistence` (skutečné RČ, prochází `% 11` checksum)
+  //    používá se pro lookup v naší DB pacientů (GET /patient/{pid})
+  //  - mzcrRid = `rid` z eŽádanky (test PID pro testovací data;
+  //    pro produkční pacienty se shoduje s RČ)
+  //    používá se pro lookup eŽádanek v MZČR (GET /ezadanka?pid=...).
+  //
+  // V produkci se oba PIDy budou shodovat. V testovacích datech MZČR má
+  // pacient `rid="9882826031"` ale `cisloPojistence="6911103815"`.
+  const patientPid =
     firstHit[0].pacient.cisloPojistence ?? firstHit[0].pacient.rid;
+  const mzcrRid = firstHit[0].pacient.rid;
 
   // Krok 2: paralelně — pacient v naší DB + všechny aktivní žádanky
   const [patientResult, ezadankyResult] = await Promise.allSettled([
-    findPatientByPid(pid),
-    searchEzadankyByRid(pid, { onlyActive: true }),
+    findPatientByPid(patientPid),
+    searchEzadankyByRid(mzcrRid, { onlyActive: true }),
   ]);
 
   if (patientResult.status === "rejected") {
@@ -295,7 +302,7 @@ async function searchByCode(
   setPhase({
     kind: "loaded",
     input: code,
-    pid,
+    pid: patientPid,
     patient: patientResult.value,
     ezadanky,
     autoOpenZadankaId: firstHit[0].id,
