@@ -36,7 +36,7 @@ export async function listXmlExportDefinitions(): Promise<
 > {
   const res = await fetch(`${API_BASE}/configuration/xmlExportDefinitions`, {
     credentials: "include",
-    headers: { Accept: "application/json, application/problem+json" },
+    headers: { Accept: "application/problem+json, application/json;q=0.9" },
   });
   if (!res.ok) {
     throw new Error(

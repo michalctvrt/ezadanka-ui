@@ -28,10 +28,14 @@ const API_BASE =
 /**
  * Některé Vaškovy endpointy (typicky GET /ezadanka/{id}) produkují
  * `application/problem+json` (RFC 7807) místo `application/json`.
- * Pokud klient pošle jen `Accept: application/json`, Jersey vrátí 406/422.
- * Posíláme obojí, ať Vašek najde shodu.
+ *
+ * `application/problem+json` musí být **první** — Vaškův Jersey resolver
+ * jinak vybere `application/json` a pak vrátí 422 s hláškou "does not match
+ * expected: application/problem+json". Order = priority.
+ *
+ * `;q=0.9` u json říká: beru ho jako fallback, ale problem+json preferuju.
  */
-const ACCEPT = "application/json, application/problem+json";
+const ACCEPT = "application/problem+json, application/json;q=0.9";
 
 /**
  * Vyhledá aktivní eŽádanky pacienta podle RČ (PID).

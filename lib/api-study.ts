@@ -78,7 +78,7 @@ export async function createStudy(
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      Accept: "application/json, application/problem+json",
+      Accept: "application/problem+json, application/json;q=0.9",
     },
     body: JSON.stringify(data),
   });
@@ -93,7 +93,7 @@ export async function createStudy(
 export async function findStudyById(id: number): Promise<StudyInfo> {
   const res = await fetch(`${API_BASE}/study/${id}`, {
     credentials: "include",
-    headers: { Accept: "application/json, application/problem+json" },
+    headers: { Accept: "application/problem+json, application/json;q=0.9" },
   });
   if (!res.ok) {
     throw new Error(`GET /study/${id} selhalo HTTP ${res.status}`);
