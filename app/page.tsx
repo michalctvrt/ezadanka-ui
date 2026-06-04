@@ -228,7 +228,10 @@ function HomeSkeleton() {
 /**
  * Vyhledávání podle kódu eŽádanky.
  *
- * 1) Najde žádanku v MZČR podle kódu → vytáhne PID pacienta.
+ * 1) Najde žádanku v MZČR podle kódu → vytáhne **RČ** pacienta
+ *    (`cisloPojistence`). Vašek validuje PID jako RČ (`% 11 == 0`),
+ *    takže `rid` (test PID) by neprošlo. Pro produkční pacienty jsou
+ *    `rid` i `cisloPojistence` shodné.
  * 2) Pak udělá **stejný flow jako u RČ**: paralelně načte pacienta
  *    z naší DB + všechny aktivní žádanky daného pacienta.
  * Výsledek: úplně stejný stav, jako by recepční rovnou zadala RČ —
@@ -256,7 +259,11 @@ async function searchByCode(
     return;
   }
 
-  const pid = firstHit[0].pacient.rid;
+  // PID = skutečné RČ (`cisloPojistence`), fallback na `rid` pokud chybí.
+  // Pro test pacienty MZČR posílá test rid (`9882826031`), který neprochází
+  // checksum, ale `cisloPojistence` ano (`6911103815`).
+  const pid =
+    firstHit[0].pacient.cisloPojistence ?? firstHit[0].pacient.rid;
 
   // Krok 2: paralelně — pacient v naší DB + všechny aktivní žádanky
   const [patientResult, ezadankyResult] = await Promise.allSettled([
