@@ -54,6 +54,13 @@ type Phase =
       pid: string;
       patient: PatientInfo | null;
       ezadanky: FlatZadankaListItem[];
+      /**
+       * Pokud recepční zadala kód žádanky, ID té konkrétní eŽádanky.
+       * `EzadankyList` ji po načtení rovnou otevře v detail-modalu —
+       * recepční má v ruce papírovou žádanku a chce hned na ni navázat,
+       * ne procházet seznam.
+       */
+      autoOpenZadankaId?: string;
     }
   | { kind: "error"; query: string; message: string }
   | { kind: "not-found"; query: string };
@@ -202,6 +209,7 @@ function HomeInner() {
               pid={phase.pid}
               patient={phase.patient}
               ezadanky={phase.ezadanky}
+              autoOpenZadankaId={phase.autoOpenZadankaId}
             />
           )}
         </div>
@@ -290,6 +298,7 @@ async function searchByCode(
     pid,
     patient: patientResult.value,
     ezadanky,
+    autoOpenZadankaId: firstHit[0].id,
   });
 }
 
@@ -339,10 +348,12 @@ function Loaded({
   pid,
   patient,
   ezadanky,
+  autoOpenZadankaId,
 }: {
   pid: string;
   patient: PatientInfo | null;
   ezadanky: FlatZadankaListItem[];
+  autoOpenZadankaId?: string;
 }) {
   const maEzadanky = ezadanky.length > 0;
   const existuje = patient !== null;
@@ -385,6 +396,7 @@ function Loaded({
           data={ezadanky}
           patientExists={existuje}
           patient={patient}
+          autoOpenZadankaId={autoOpenZadankaId}
         />
       )}
 

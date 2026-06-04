@@ -30,6 +30,12 @@ interface Props {
   patientExists?: boolean;
   /** Pacient z naší DB — propaguje se do EzadankaDetail pro POST /study */
   patient?: PatientInfo | null;
+  /**
+   * UUID eŽádanky, kterou má při mountu rovnou otevřít v detail modalu.
+   * Typicky když recepční vyhledala konkrétní kód — nemá smysl ji nutit
+   * klikat ještě v seznamu.
+   */
+  autoOpenZadankaId?: string;
 }
 
 const MODALITA_BARVY: Record<Modalita, string> = {
@@ -53,6 +59,7 @@ export default function EzadankyList({
   data: preloadedData,
   patientExists = true,
   patient,
+  autoOpenZadankaId,
 }: Props) {
   const [data, setData] = useState<FlatZadankaListItem[]>(
     preloadedData ?? []
@@ -60,6 +67,17 @@ export default function EzadankyList({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+
+  // Auto-open detail modal pro konkrétní žádanku, pokud je předaná
+  // přes prop (typicky když recepční vyhledala podle kódu).
+  // Sleduje změny `autoOpenZadankaId` — re-vyhledávání jiného kódu
+  // otevře nový detail. Pokud uživatel modal mezitím zavřel, reaguje
+  // jen na **nové** ID (`autoOpenZadankaId` muselo opravdu projít změnou).
+  useEffect(() => {
+    if (autoOpenZadankaId) {
+      setOpenId(autoOpenZadankaId);
+    }
+  }, [autoOpenZadankaId]);
 
   // Pokud rodič dodal data, použijeme je. Jinak fetchneme sami.
   useEffect(() => {
